@@ -12,7 +12,8 @@ import ProfileModal from './components/ProfileModal';
 import Chatbot from './components/Chatbot';
 import ExcelImport from './components/ExcelImport';
 import StatsView from './components/StatsView';
-import { LogOut, Plus, Users, Loader2, LayoutGrid, List, Share2, ShieldCheck, BarChart2 } from 'lucide-react';
+import AISettings from './components/AISettings';
+import { LogOut, Plus, Users, Loader2, LayoutGrid, List, Share2, ShieldCheck, BarChart2, Sparkles } from 'lucide-react';
 
 enum OperationType {
   CREATE = 'create',
@@ -102,7 +103,7 @@ export default function App() {
   const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
   const [editingMember, setEditingMember] = useState<FamilyMember | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'tree' | 'directory' | 'users' | 'stats'>('tree');
+  const [viewMode, setViewMode] = useState<'tree' | 'directory' | 'users' | 'stats' | 'ai_settings'>('tree');
   const [appError, setAppError] = useState<Error | null>(null);
 
   useEffect(() => {
@@ -115,8 +116,9 @@ export default function App() {
         if (userSnap.exists()) {
           setUserRole(userSnap.data().role as UserRole);
         } else {
-          // Default role if doc doesn't exist yet
-          setUserRole(currentUser.email === 'mobeng.ho@gmail.com' ? 'admin' : 'viewer');
+          // Default roles for specific emails if doc doesn't exist
+          const adminEmails = ['mobeng.ho@gmail.com', 'budagbogor@gmail.com'];
+          setUserRole(adminEmails.includes(currentUser.email || '') ? 'admin' : 'viewer');
         }
       }
       setIsAuthReady(true);
@@ -355,6 +357,19 @@ export default function App() {
                   <span className="hidden sm:inline">User</span>
                 </button>
               )}
+              {userRole === 'admin' && (
+                <button
+                  onClick={() => setViewMode('ai_settings')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${
+                    viewMode === 'ai_settings' 
+                      ? 'bg-amber-600 text-white shadow-md scale-105' 
+                      : 'text-amber-200 hover:text-white hover:bg-amber-800/50'
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span className="hidden sm:inline">AI Config</span>
+                </button>
+              )}
             </div>
 
             {/* Right: Actions */}
@@ -438,8 +453,10 @@ export default function App() {
           />
         ) : viewMode === 'stats' ? (
           <StatsView members={members} />
-        ) : (
+        ) : viewMode === 'users' ? (
           <UserManagement currentUserRole={userRole} />
+        ) : (
+          <AISettings />
         )}
       </main>
 
