@@ -1,5 +1,5 @@
-import { FamilyMember } from '../types';
-import { X, Phone, User, Heart, Flower2, Calendar, MapPin, Edit2, Trash2 } from 'lucide-react';
+import { FamilyMember, UserRole } from '../types';
+import { X, Phone, User, Heart, Flower2, Calendar, MapPin, Edit2, Trash2, Briefcase, GraduationCap } from 'lucide-react';
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -8,10 +8,13 @@ interface ProfileModalProps {
   members: FamilyMember[];
   onEdit?: (member: FamilyMember) => void;
   onDelete?: (memberId: string) => void;
+  currentUserRole: UserRole;
 }
 
-export default function ProfileModal({ isOpen, onClose, member, members, onEdit, onDelete }: ProfileModalProps) {
+export default function ProfileModal({ isOpen, onClose, member, members, onEdit, onDelete, currentUserRole }: ProfileModalProps) {
   if (!isOpen || !member) return null;
+
+  const isAdmin = currentUserRole === 'admin';
 
   const getParentName = (id?: string) => members.find(m => m.id === id)?.fullName || 'Tidak diketahui';
   const getSpouseName = (id?: string) => members.find(m => m.id === id)?.fullName || 'Tidak diketahui';
@@ -83,6 +86,22 @@ export default function ProfileModal({ isOpen, onClose, member, members, onEdit,
                 <p className="text-gray-800 text-sm">{member.address}</p>
               </div>
             )}
+            {member.occupation && (
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1 flex items-center gap-1">
+                  <Briefcase className="w-3 h-3" /> Pekerjaan
+                </p>
+                <p className="text-gray-800 text-sm">{member.occupation}</p>
+              </div>
+            )}
+            {member.education && (
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1 flex items-center gap-1">
+                  <GraduationCap className="w-3 h-3" /> Pendidikan
+                </p>
+                <p className="text-gray-800 text-sm">{member.education}</p>
+              </div>
+            )}
             <div>
               <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mb-1">Nasab (Ayah)</p>
               <p className="text-gray-800 uppercase">{getParentName(member.parentId)}</p>
@@ -121,30 +140,32 @@ export default function ProfileModal({ isOpen, onClose, member, members, onEdit,
             </a>
           )}
 
-          <div className="flex gap-3">
-            {onEdit && (
-              <button
-                onClick={() => { onClose(); onEdit(member); }}
-                className="flex-1 flex items-center justify-center gap-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 py-3 px-6 rounded-xl transition-colors font-medium"
-              >
-                <Edit2 className="w-4 h-4" />
-                Edit Data
-              </button>
-            )}
-            {onDelete && (
-              <button
-                onClick={() => {
-                  if (window.confirm('Apakah Anda yakin ingin menghapus anggota keluarga ini?')) {
-                    onDelete(member.id);
-                  }
-                }}
-                className="flex-1 flex items-center justify-center gap-2 bg-red-100 hover:bg-red-200 text-red-700 py-3 px-6 rounded-xl transition-colors font-medium"
-              >
-                <Trash2 className="w-4 h-4" />
-                Hapus
-              </button>
-            )}
-          </div>
+          {isAdmin && (
+            <div className="flex gap-3">
+              {onEdit && (
+                <button
+                  onClick={() => { onClose(); onEdit(member); }}
+                  className="flex-1 flex items-center justify-center gap-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 py-3 px-6 rounded-xl transition-colors font-medium"
+                >
+                  <Edit2 className="w-4 h-4" />
+                  Edit Data
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  onClick={() => {
+                    if (window.confirm('Apakah Anda yakin ingin menghapus anggota keluarga ini?')) {
+                      onDelete(member.id);
+                    }
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 bg-red-100 hover:bg-red-200 text-red-700 py-3 px-6 rounded-xl transition-colors font-medium"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Hapus
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

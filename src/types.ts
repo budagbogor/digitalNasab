@@ -1,3 +1,15 @@
+export type UserRole = 'admin' | 'viewer';
+
+export interface AppUser {
+  uid: string;
+  email: string;
+  role: UserRole;
+  displayName?: string;
+  photoURL?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface FamilyMember {
   id: string;
   ownerId: string;
@@ -12,6 +24,8 @@ export interface FamilyMember {
   spouseId?: string;
   photoUrl?: string;
   phone?: string;
+  occupation?: string;
+  education?: string;
   bio?: string;
   createdAt: Date;
   updatedAt: Date;

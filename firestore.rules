@@ -13,7 +13,9 @@ service cloud.firestore {
     //   - email: string (required, immutable) - The user's email address
     //   - displayName: string (optional) - The user's display name
     //   - photoURL: string (optional) - The user's profile photo URL
+    //   - role: string (required) - The user's role ('admin' or 'viewer')
     //   - createdAt: timestamp (required, immutable) - When the user was created
+    //   - updatedAt: timestamp (required) - When the user was last updated
     //
     // Collection: members
     // Document ID: memberId
@@ -50,6 +52,21 @@ service cloud.firestore {
 
     function isDocOwner() {
       return isAuthenticated() && request.auth.uid == resource.data.ownerId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
+         (request.auth.token.email == "mobeng.ho@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isViewer() {
+      return isAuthenticated() && 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'viewer' || 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') || 
+         isAdmin());
     }
 
     function uidUnchanged() {
@@ -108,27 +125,23 @@ service cloud.firestore {
         (request.resource.data[field] is string && (request.resource.data[field].matches("^https://.*") || request.resource.data[field].matches("^http://.*") || request.resource.data[field].matches("^data:image/.*")) && request.resource.data[field].size() <= 800000);
     }
 
-    function isImmutableUnchanged(field) {
-      return !(field in request.resource.data) || 
-             !(field in resource.data) || 
-             request.resource.data[field] == resource.data[field];
-    }
-
     function areImmutableFieldsUnchanged(fields) {
-      return fields.all(field => isImmutableUnchanged(field));
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
     }
 
     // ===============================================================
     // Domain Validators
     // ===============================================================
     function isValidUser(data) {
-      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'createdAt']) &&
-             hasRequiredFields(['uid', 'email', 'createdAt']) &&
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'role', 'createdAt', 'updatedAt']) &&
+             hasRequiredFields(['uid', 'email', 'role', 'createdAt', 'updatedAt']) &&
              data.uid == request.auth.uid &&
              isValidEmail(data.email) &&
              isValidOptionalString('displayName', 0, 100) &&
              isValidOptionalUrl('photoURL') &&
-             data.createdAt is timestamp;
+             (data.role == 'admin' || data.role == 'viewer') &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
     }
 
     function isValidMember(data) {
@@ -156,17 +169,20 @@ service cloud.firestore {
     // Rules
     // ===============================================================
     match /users/{userId} {
-      allow read: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidUser(request.resource.data) && uidUnchanged();
-      allow update: if isOwner(userId) && isValidUser(request.resource.data) && areImmutableFieldsUnchanged(['uid', 'email', 'createdAt']);
-      allow delete: if isOwner(userId);
+      allow read: if isAuthenticated();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      (request.resource.data.role == 'viewer' || request.auth.token.email == "mobeng.ho@gmail.com");
+      allow update: if isAdmin() || (isOwner(userId) && isValidUser(request.resource.data) && 
+                      request.resource.data.role == resource.data.role &&
+                      areImmutableFieldsUnchanged(['uid', 'email', 'createdAt']));
+      allow delete: if isAdmin();
     }
 
     match /members/{memberId} {
-      allow read: if isOwner(resource.data.ownerId);
-      allow create: if isAuthenticated() && isValidMember(request.resource.data) && ownerIdUnchanged();
-      allow update: if isDocOwner() && isValidMember(request.resource.data) && ownerIdNotModified() && areImmutableFieldsUnchanged(['id', 'ownerId', 'createdAt']);
-      allow delete: if isDocOwner();
+      allow read: if isViewer();
+      allow create: if isAdmin() && isValidMember(request.resource.data);
+      allow update: if isAdmin() && isValidMember(request.resource.data) && areImmutableFieldsUnchanged(['id', 'createdAt']);
+      allow delete: if isAdmin();
     }
   }
 }

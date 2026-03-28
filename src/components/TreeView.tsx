@@ -13,7 +13,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import dagre from 'dagre';
-import { FamilyMember } from '../types';
+import { FamilyMember, UserRole } from '../types';
 import { User, Flower2, Edit2, Info } from 'lucide-react';
 
 const nodeWidth = 280;
@@ -121,12 +121,14 @@ interface TreeViewProps {
   members: FamilyMember[];
   onNodeClick: (member: FamilyMember) => void;
   onEditClick: (member: FamilyMember) => void;
+  currentUserRole: UserRole;
 }
 
 const CustomNode = ({ data }: { data: any }) => {
-  const { member, onEditClick, onInfoClick } = data;
+  const { member, onEditClick, onInfoClick, currentUserRole } = data;
   const isMale = member.gender === 'male';
   const isDeceased = !member.isAlive;
+  const isAdmin = currentUserRole === 'admin';
 
   // Warna yang jauh lebih kontras untuk membedakan Pria dan Wanita
   const bgColor = isDeceased ? 'bg-slate-100' : isMale ? 'bg-emerald-50' : 'bg-rose-50';
@@ -174,13 +176,15 @@ const CustomNode = ({ data }: { data: any }) => {
       </div>
 
       <div className="absolute -top-3 -right-3 flex gap-1">
-        <button 
-          onClick={(e) => { e.stopPropagation(); onEditClick(member); }}
-          className="p-2 text-gray-600 hover:text-emerald-600 transition-colors bg-white rounded-full shadow-md border-2 border-gray-200 hover:border-emerald-400"
-          title="Edit"
-        >
-          <Edit2 className="w-4 h-4" />
-        </button>
+        {isAdmin && (
+          <button 
+            onClick={(e) => { e.stopPropagation(); onEditClick(member); }}
+            className="p-2 text-gray-600 hover:text-emerald-600 transition-colors bg-white rounded-full shadow-md border-2 border-gray-200 hover:border-emerald-400"
+            title="Edit"
+          >
+            <Edit2 className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -190,7 +194,7 @@ const nodeTypes = {
   custom: CustomNode,
 };
 
-export default function TreeView({ members, onNodeClick, onEditClick }: TreeViewProps) {
+export default function TreeView({ members, onNodeClick, onEditClick, currentUserRole }: TreeViewProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
@@ -198,7 +202,7 @@ export default function TreeView({ members, onNodeClick, onEditClick }: TreeView
     const initialNodes: Node[] = members.map((member) => ({
       id: member.id,
       type: 'custom',
-      data: { member, onEditClick, onInfoClick: onNodeClick },
+      data: { member, onEditClick, onInfoClick: onNodeClick, currentUserRole },
       position: { x: 0, y: 0 },
     }));
 
@@ -237,9 +241,6 @@ export default function TreeView({ members, onNodeClick, onEditClick }: TreeView
             label: '❤️',
             labelStyle: { fill: '#b45309', fontWeight: 800, fontSize: 12 },
             labelBgStyle: { fill: '#fef3c7', fillOpacity: 0.8, rx: 4, ry: 4 },
-            // Hubungkan dari titik geser agar tidak menabrak tengah
-            sourceHandle: 'spouse-source',
-            targetHandle: 'spouse-target',
           });
         }
       }

@@ -1,15 +1,17 @@
 import { useState } from 'react';
-import { FamilyMember } from '../types';
+import { FamilyMember, UserRole } from '../types';
 import { Search, Edit2, Trash2, User, Flower2, Phone, MapPin } from 'lucide-react';
 
 interface DirectoryViewProps {
   members: FamilyMember[];
   onEdit: (member: FamilyMember) => void;
   onDelete: (memberId: string) => void;
+  currentUserRole: UserRole;
 }
 
-export default function DirectoryView({ members, onEdit, onDelete }: DirectoryViewProps) {
+export default function DirectoryView({ members, onEdit, onDelete, currentUserRole }: DirectoryViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const isAdmin = currentUserRole === 'admin';
 
   const getMemberName = (id?: string) => members.find(m => m.id === id)?.fullName || '-';
 
@@ -106,29 +108,31 @@ export default function DirectoryView({ members, onEdit, onDelete }: DirectoryVi
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 transition-opacity">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEdit(member);
-                      }}
-                      className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors bg-gray-50"
-                      title="Edit"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // Menghapus window.confirm karena sering terblokir di lingkungan iframe
-                        onDelete(member.id);
-                      }}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors bg-gray-50"
-                      title="Hapus"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  {isAdmin && (
+                    <div className="flex items-center gap-2 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit(member);
+                        }}
+                        className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors bg-gray-50"
+                        title="Edit"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Menghapus window.confirm karena sering terblokir di lingkungan iframe
+                          onDelete(member.id);
+                        }}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors bg-gray-50"
+                        title="Hapus"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

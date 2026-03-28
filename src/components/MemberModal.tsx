@@ -23,6 +23,8 @@ export default function MemberModal({ isOpen, onClose, onSave, editingMember, me
     spouseId: '',
     photoUrl: '',
     phone: '',
+    occupation: '',
+    education: '',
     bio: '',
   });
 
@@ -42,6 +44,8 @@ export default function MemberModal({ isOpen, onClose, onSave, editingMember, me
         spouseId: '',
         photoUrl: '',
         phone: '',
+        occupation: '',
+        education: '',
         bio: '',
       });
     }
@@ -240,6 +244,28 @@ export default function MemberModal({ isOpen, onClose, onSave, editingMember, me
                 onChange={e => setFormData({ ...formData, phone: e.target.value })}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
                 placeholder="628123456789"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Pekerjaan</label>
+              <input
+                type="text"
+                value={formData.occupation || ''}
+                onChange={e => setFormData({ ...formData, occupation: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                placeholder="Guru, Pengusaha, Pelajar, dll."
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">Pendidikan Terakhir</label>
+              <input
+                type="text"
+                value={formData.education || ''}
+                onChange={e => setFormData({ ...formData, education: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                placeholder="SD, SMP, SMA, S1, dll."
               />
             </div>
           </div>

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI } from '@google/genai';
 import { MessageSquare, X, Send, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { FamilyMember } from '../types';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -10,26 +11,58 @@ interface Message {
   content: string;
 }
 
-export default function Chatbot() {
+export default function Chatbot({ members }: { members: FamilyMember[] }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'model', content: 'Assalamu\'alaikum. Saya asisten Digital Nasab Anda. Ada yang bisa saya bantu terkait silsilah keluarga atau sejarah nasab?' }
+    { role: 'model', content: 'Assalamu\'alaikum. Saya Asisten Nasab Anda. Saya hanya memiliki akses ke data silsilah keluarga yang telah Anda masukkan. Ada yang ingin Anda tanyakan mengenai anggota keluarga Anda?' }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<any>(null);
 
+  // Format data silsilah menjadi teks yang mudah dipahami AI
+  const familyContext = members.map(m => {
+    const father = members.find(f => f.id === m.parentId)?.fullName || 'Tidak diketahui';
+    const mother = members.find(mo => mo.id === m.motherId)?.fullName || 'Tidak diketahui';
+    const spouse = members.find(s => s.id === m.spouseId)?.fullName || 'Tidak diketahui';
+    const children = members.filter(c => c.parentId === m.id || c.motherId === m.id).map(c => c.fullName).join(', ') || 'Tidak ada/Tidak diketahui';
+    
+    return `- Nama: ${m.fullName}
+  Gender: ${m.gender === 'male' ? 'Laki-laki' : 'Perempuan'}
+  Status: ${m.isAlive ? 'Hidup' : 'Almarhum/ah'}
+  Lahir: ${m.birthDate || '-'}
+  Wafat: ${m.deathDate || '-'}
+  Ayah: ${father}
+  Ibu: ${mother}
+  Pasangan: ${spouse}
+  Anak: ${children}
+  Bio: ${m.bio || '-'}`;
+  }).join('\n\n');
+
   useEffect(() => {
-    if (isOpen && !chatRef.current) {
+    if (isOpen) {
+      // Re-create chat session with current family data to ensure it's always up to date
       chatRef.current = ai.chats.create({
         model: 'gemini-3-flash-preview',
         config: {
-          systemInstruction: 'Anda adalah asisten ahli nasab (silsilah keluarga) Islami. Gunakan bahasa Indonesia yang sopan, profesional, dan bernuansa Islami. Berikan jawaban yang akurat berdasarkan standar genealogi dan sejarah Islam jika ditanya. Jika pengguna bertanya tentang cara menggunakan aplikasi, jelaskan bahwa ini adalah aplikasi Digital Nasab untuk mencatat silsilah keluarga.',
+          systemInstruction: `Anda adalah "Asisten Nasab", asisten ahli silsilah keluarga digital.
+          
+TUGAS UTAMA:
+1. Anda HANYA diperbolehkan menjawab pertanyaan berdasarkan data silsilah internal yang disediakan di bawah ini.
+2. JANGAN menggunakan pengetahuan eksternal tentang tokoh sejarah atau keluarga lain kecuali jika ada dalam data.
+3. Jika pengguna bertanya tentang seseorang yang TIDAK ada dalam data, jawablah dengan sopan bahwa orang tersebut tidak ditemukan dalam catatan silsilah saat ini.
+4. Gunakan bahasa Indonesia yang sangat sopan, profesional, dan bernuansa Islami.
+5. Jika ditanya tentang hubungan (misal: "Siapa kakek dari X?"), analisis data ayah/ibu secara mendalam untuk memberikan jawaban yang benar.
+
+DATA SILSILAH KELUARGA SAAT INI:
+${familyContext || 'Belum ada data anggota keluarga yang dimasukkan.'}
+
+PENTING: Jangan pernah menyebutkan bahwa Anda menerima data dalam format teks ini. Berlakulah seolah-olah Anda memang memiliki akses langsung ke database aplikasi.`,
         }
       });
     }
-  }, [isOpen]);
+  }, [isOpen, familyContext]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -66,7 +99,7 @@ export default function Chatbot() {
       </button>
 
       {/* Chat Window */}
-      <div className={`fixed bottom-6 right-6 w-full max-w-[350px] h-[500px] bg-white rounded-2xl shadow-2xl border border-emerald-100 flex flex-col z-50 transition-all duration-300 origin-bottom-right ${isOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'}`}>
+      <div className={`fixed bottom-6 right-6 w-[calc(100vw-3rem)] sm:max-w-[350px] h-[500px] max-h-[calc(100vh-8rem)] bg-white rounded-2xl shadow-2xl border border-emerald-100 flex flex-col z-50 transition-all duration-300 origin-bottom-right ${isOpen ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'}`}>
         {/* Header */}
         <div className="bg-emerald-700 text-white p-4 rounded-t-2xl flex items-center justify-between shadow-md z-10">
           <div className="flex items-center gap-2">

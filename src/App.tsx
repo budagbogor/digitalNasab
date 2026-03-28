@@ -1,16 +1,18 @@
 import { useState, useEffect, useMemo } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, deleteDoc, setDoc, getDocFromServer } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, deleteDoc, setDoc, getDoc, getDocFromServer } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { FamilyMember, NewFamilyMember } from './types';
+import { FamilyMember, NewFamilyMember, UserRole, AppUser } from './types';
 import Auth from './components/Auth';
 import TreeView from './components/TreeView';
 import DirectoryView from './components/DirectoryView';
+import UserManagement from './components/UserManagement';
 import MemberModal from './components/MemberModal';
 import ProfileModal from './components/ProfileModal';
 import Chatbot from './components/Chatbot';
-import SeedData from './components/SeedData';
-import { LogOut, Plus, Users, Loader2, LayoutGrid, List, Share2 } from 'lucide-react';
+import ExcelImport from './components/ExcelImport';
+import StatsView from './components/StatsView';
+import { LogOut, Plus, Users, Loader2, LayoutGrid, List, Share2, ShieldCheck, BarChart2 } from 'lucide-react';
 
 enum OperationType {
   CREATE = 'create',
@@ -92,6 +94,7 @@ function ErrorFallback({ error }: { error: Error }) {
 
 export default function App() {
   const [user, setUser] = useState<any>(null);
+  const [userRole, setUserRole] = useState<UserRole>('viewer');
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
@@ -99,12 +102,23 @@ export default function App() {
   const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
   const [editingMember, setEditingMember] = useState<FamilyMember | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'tree' | 'directory'>('tree');
+  const [viewMode, setViewMode] = useState<'tree' | 'directory' | 'users' | 'stats'>('tree');
   const [appError, setAppError] = useState<Error | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
+      if (currentUser) {
+        // Fetch user role
+        const userRef = doc(db, 'users', currentUser.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          setUserRole(userSnap.data().role as UserRole);
+        } else {
+          // Default role if doc doesn't exist yet
+          setUserRole(currentUser.email === 'mobeng.ho@gmail.com' ? 'admin' : 'viewer');
+        }
+      }
       setIsAuthReady(true);
     });
     return () => unsubscribe();
@@ -112,6 +126,14 @@ export default function App() {
 
   useEffect(() => {
     if (isAuthReady && user) {
+      // Listen for role changes in real-time
+      const userRef = doc(db, 'users', user.uid);
+      const unsubscribeRole = onSnapshot(userRef, (doc) => {
+        if (doc.exists()) {
+          setUserRole(doc.data().role as UserRole);
+        }
+      });
+
       // Test connection to Firestore
       const testConnection = async () => {
         try {
@@ -124,8 +146,8 @@ export default function App() {
       };
       testConnection();
 
-      const q = query(collection(db, 'members'), where('ownerId', '==', user.uid));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
+      const q = query(collection(db, 'members')); // Admins and viewers can see all members in a shared tree
+      const unsubscribeMembers = onSnapshot(q, (snapshot) => {
         const membersData: FamilyMember[] = [];
         snapshot.forEach((doc) => {
           const data = doc.data();
@@ -146,7 +168,10 @@ export default function App() {
         }
         setIsLoading(false);
       });
-      return () => unsubscribe();
+      return () => {
+        unsubscribeRole();
+        unsubscribeMembers();
+      };
     } else if (isAuthReady && !user) {
       setMembers([]);
       setIsLoading(false);
@@ -268,59 +293,109 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 font-sans">
       {/* Header */}
-      <header className="bg-emerald-800 text-white shadow-md z-10">
+      <header className="bg-emerald-800 text-white shadow-lg z-20 sticky top-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-3">
-              <div className="bg-emerald-700 p-2 rounded-lg">
+          <div className="flex flex-col md:flex-row justify-between items-center py-3 md:h-20 gap-4 md:gap-0">
+            {/* Left: Logo & Title */}
+            <div className="flex items-center gap-3 w-full md:w-auto">
+              <div className="bg-emerald-700 p-2.5 rounded-xl shadow-inner">
                 <Users className="w-6 h-6 text-emerald-100" />
               </div>
               <div>
-                <h1 className="text-xl font-bold tracking-tight">Digital Nasab</h1>
-                <p className="text-xs text-emerald-200 hidden sm:block">Silsilah Keluarga Digital</p>
+                <h1 className="text-xl font-bold tracking-tight leading-none">Digital Nasab</h1>
+                <p className="text-[10px] text-emerald-300 mt-1 uppercase tracking-widest font-semibold hidden sm:block">Silsilah Keluarga Digital</p>
               </div>
             </div>
             
-            <div className="flex-1 text-center hidden md:block px-4">
-              <p className="text-sm font-arabic text-emerald-100 italic" dir="rtl">
-                "مَنْ أَحَبَّ أَنْ يُبْسَطَ لَهُ فِي رِزْقِهِ، وَيُنْسَأَ لَهُ فِي أَثَرِهِ، فَلْيَصِلْ رَحِمَهُ"
-              </p>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <div className="flex items-center bg-emerald-700 rounded-lg p-1 mr-2">
-                <button
-                  onClick={() => setViewMode('tree')}
-                  className={`p-1.5 rounded-md transition-all ${viewMode === 'tree' ? 'bg-emerald-600 text-white shadow-sm' : 'text-emerald-200 hover:text-white'}`}
-                  title="Tampilan Pohon"
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('directory')}
-                  className={`p-1.5 rounded-md transition-all ${viewMode === 'directory' ? 'bg-emerald-600 text-white shadow-sm' : 'text-emerald-200 hover:text-white'}`}
-                  title="Tampilan Direktori"
-                >
-                  <List className="w-4 h-4" />
-                </button>
-              </div>
-              <SeedData userId={user.uid} />
+            {/* Center: Navigation Toggles */}
+            <div className="flex items-center bg-emerald-900/50 backdrop-blur-sm rounded-xl p-1 border border-emerald-700/50 shadow-inner">
               <button
-                onClick={() => { setEditingMember(null); setIsMemberModalOpen(true); }}
-                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-emerald-500 shadow-sm"
+                onClick={() => setViewMode('tree')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${
+                  viewMode === 'tree' 
+                    ? 'bg-emerald-600 text-white shadow-md scale-105' 
+                    : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                }`}
               >
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">Tambah Anggota</span>
+                <LayoutGrid className="w-4 h-4" />
+                <span className="hidden sm:inline">Pohon</span>
               </button>
               <button
+                onClick={() => setViewMode('directory')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${
+                  viewMode === 'directory' 
+                    ? 'bg-emerald-600 text-white shadow-md scale-105' 
+                    : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                }`}
+              >
+                <List className="w-4 h-4" />
+                <span className="hidden sm:inline">Direktori</span>
+              </button>
+              <button
+                onClick={() => setViewMode('stats')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${
+                  viewMode === 'stats' 
+                    ? 'bg-emerald-600 text-white shadow-md scale-105' 
+                    : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                }`}
+              >
+                <BarChart2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Statistik</span>
+              </button>
+              {userRole === 'admin' && (
+                <button
+                  onClick={() => setViewMode('users')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${
+                    viewMode === 'users' 
+                      ? 'bg-emerald-600 text-white shadow-md scale-105' 
+                      : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                  }`}
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span className="hidden sm:inline">User</span>
+                </button>
+              )}
+            </div>
+
+            {/* Right: Actions */}
+            <div className="flex items-center gap-2 w-full md:w-auto justify-center md:justify-end">
+              <div className="hidden lg:block mr-2">
+                <ExcelImport userId={user.uid} currentUserRole={userRole} />
+              </div>
+              
+              {userRole === 'admin' && (
+                <button
+                  onClick={() => { setEditingMember(null); setIsMemberModalOpen(true); }}
+                  className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-amber-950 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-md active:scale-95 border border-amber-400/50"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span className="hidden xl:inline">Tambah Anggota</span>
+                </button>
+              )}
+
+              <div className="h-8 w-px bg-emerald-700/50 mx-1 hidden md:block"></div>
+
+              <button
                 onClick={() => signOut(auth)}
-                className="p-2 text-emerald-200 hover:text-white hover:bg-emerald-700 rounded-lg transition-colors"
+                className="p-2.5 text-emerald-200 hover:text-white hover:bg-red-500/20 rounded-xl transition-all group"
                 title="Keluar"
               >
-                <LogOut className="w-5 h-5" />
+                <LogOut className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </button>
             </div>
           </div>
+        </div>
+        
+        {/* Mobile Excel Import (Visible only on mobile/tablet) */}
+        <div className="lg:hidden bg-emerald-900/30 border-t border-emerald-700/30 px-4 py-2 flex justify-center">
+          <ExcelImport userId={user.uid} currentUserRole={userRole} />
+        </div>
+
+        {/* Hadith Banner (Desktop only, subtle) */}
+        <div className="hidden xl:block bg-emerald-900/40 py-1.5 border-t border-emerald-700/30">
+          <p className="text-[11px] text-center font-arabic text-emerald-200/80 italic tracking-wide" dir="rtl">
+            "مَنْ أَحَبَّ أَنْ يُبْسَطَ لَهُ فِي رِزْقِهِ، وَيُنْسَأَ لَهُ فِي أَثَرِهِ، فَلْيَصِلْ رَحِمَهُ"
+          </p>
         </div>
       </header>
 
@@ -352,13 +427,19 @@ export default function App() {
             members={members} 
             onNodeClick={handleNodeClick} 
             onEditClick={handleEditClick} 
+            currentUserRole={userRole}
           />
-        ) : (
+        ) : viewMode === 'directory' ? (
           <DirectoryView
             members={members}
             onEdit={handleEditClick}
             onDelete={handleDeleteMember}
+            currentUserRole={userRole}
           />
+        ) : viewMode === 'stats' ? (
+          <StatsView members={members} />
+        ) : (
+          <UserManagement currentUserRole={userRole} />
         )}
       </main>
 
@@ -378,9 +459,10 @@ export default function App() {
         members={members}
         onEdit={handleEditClick}
         onDelete={handleDeleteMember}
+        currentUserRole={userRole}
       />
 
-      <Chatbot />
+      <Chatbot members={members} />
     </div>
   );
 }

@@ -1,11 +1,32 @@
 import { signInWithPopup } from 'firebase/auth';
-import { auth, googleProvider } from '../firebase';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, googleProvider, db } from '../firebase';
 import { LogIn } from 'lucide-react';
 
 export default function Auth() {
   const handleLogin = async () => {
     try {
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+
+      if (user) {
+        const userRef = doc(db, 'users', user.uid);
+        const userSnap = await getDoc(userRef);
+
+        if (!userSnap.exists()) {
+          // First time login
+          const isDefaultAdmin = user.email === 'mobeng.ho@gmail.com';
+          await setDoc(userRef, {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            photoURL: user.photoURL,
+            role: isDefaultAdmin ? 'admin' : 'viewer',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
     } catch (error) {
       console.error("Login failed:", error);
     }
