@@ -58,7 +58,7 @@ service cloud.firestore {
       return isAuthenticated() && 
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
-         ((request.auth.token.email == "mobeng.ho@gmail.com" || request.auth.token.email == "budagbogor@gmail.com") && request.auth.token.email_verified == true));
+         (request.auth.token.email == "mobeng.ho@gmail.com" && request.auth.token.email_verified == true));
     }
 
     function isViewer() {
@@ -183,11 +183,6 @@ service cloud.firestore {
       allow create: if isAdmin() && isValidMember(request.resource.data);
       allow update: if isAdmin() && isValidMember(request.resource.data) && areImmutableFieldsUnchanged(['id', 'createdAt']);
       allow delete: if isAdmin();
-    }
-
-    match /settings/{docId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
     }
   }
 }
