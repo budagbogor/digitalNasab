@@ -2,16 +2,14 @@ import { useState, useRef, useEffect } from 'react';
 import { GoogleGenAI } from '@google/genai';
 import { MessageSquare, X, Send, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { FamilyMember } from '../types';
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+import { FamilyMember, GlobalSettings } from '../types';
 
 interface Message {
   role: 'user' | 'model';
   content: string;
 }
 
-export default function Chatbot({ members }: { members: FamilyMember[] }) {
+export default function Chatbot({ members, globalSettings }: { members: FamilyMember[], globalSettings: GlobalSettings | null }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { role: 'model', content: 'Assalamu\'alaikum. Saya Asisten Nasab Anda. Saya hanya memiliki akses ke data silsilah keluarga yang telah Anda masukkan. Ada yang ingin Anda tanyakan mengenai anggota keluarga Anda?' }
@@ -20,6 +18,9 @@ export default function Chatbot({ members }: { members: FamilyMember[] }) {
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<any>(null);
+
+  const aiProvider = globalSettings?.aiProvider || 'gemini';
+  const sumopodKey = globalSettings?.sumopodApiKey;
 
   // Format data silsilah menjadi teks yang mudah dipahami AI
   const familyContext = members.map(m => {
@@ -40,13 +41,7 @@ export default function Chatbot({ members }: { members: FamilyMember[] }) {
   Bio: ${m.bio || '-'}`;
   }).join('\n\n');
 
-  useEffect(() => {
-    if (isOpen) {
-      // Re-create chat session with current family data to ensure it's always up to date
-      chatRef.current = ai.chats.create({
-        model: 'gemini-3-flash-preview',
-        config: {
-          systemInstruction: `Anda adalah "Asisten Nasab", asisten ahli silsilah keluarga digital.
+  const systemPrompt = `Anda adalah "Asisten Nasab", asisten ahli silsilah keluarga digital.
           
 TUGAS UTAMA:
 1. Anda HANYA diperbolehkan menjawab pertanyaan berdasarkan data silsilah internal yang disediakan di bawah ini.
@@ -58,15 +53,54 @@ TUGAS UTAMA:
 DATA SILSILAH KELUARGA SAAT INI:
 ${familyContext || 'Belum ada data anggota keluarga yang dimasukkan.'}
 
-PENTING: Jangan pernah menyebutkan bahwa Anda menerima data dalam format teks ini. Berlakulah seolah-olah Anda memang memiliki akses langsung ke database aplikasi.`,
+PENTING: Jangan pernah menyebutkan bahwa Anda menerima data dalam format teks ini. Berlakulah seolah-olah Anda memang memiliki akses langsung ke database aplikasi.`;
+
+  useEffect(() => {
+    if (isOpen && aiProvider === 'gemini') {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      chatRef.current = ai.chats.create({
+        model: 'gemini-3-flash-preview',
+        config: {
+          systemInstruction: systemPrompt,
         }
       });
     }
-  }, [isOpen, familyContext]);
+  }, [isOpen, familyContext, aiProvider]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  const callSumopodAI = async (userMsg: string) => {
+    if (!sumopodKey) {
+      throw new Error('API Key Sumopod belum diatur oleh Admin.');
+    }
+
+    // Sumopod API endpoint (Assuming standard chat completion format)
+    const response = await fetch('https://api.sumopod.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${sumopodKey}`
+      },
+      body: JSON.stringify({
+        model: 'sumopod-1',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...messages.map(m => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.content })),
+          { role: 'user', content: userMsg }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error?.message || `Sumopod API Error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0].message.content;
+  };
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,11 +112,19 @@ PENTING: Jangan pernah menyebutkan bahwa Anda menerima data dalam format teks in
     setIsLoading(true);
 
     try {
-      const response = await chatRef.current.sendMessage({ message: userMsg });
-      setMessages(prev => [...prev, { role: 'model', content: response.text }]);
-    } catch (error) {
+      let responseText = '';
+      
+      if (aiProvider === 'gemini') {
+        const response = await chatRef.current.sendMessage({ message: userMsg });
+        responseText = response.text;
+      } else {
+        responseText = await callSumopodAI(userMsg);
+      }
+
+      setMessages(prev => [...prev, { role: 'model', content: responseText }]);
+    } catch (error: any) {
       console.error('Chat error:', error);
-      setMessages(prev => [...prev, { role: 'model', content: 'Mohon maaf, terjadi kesalahan saat memproses pesan Anda. Silakan coba lagi.' }]);
+      setMessages(prev => [...prev, { role: 'model', content: `Mohon maaf, terjadi kesalahan: ${error.message || 'Silakan coba lagi.'}` }]);
     } finally {
       setIsLoading(false);
     }

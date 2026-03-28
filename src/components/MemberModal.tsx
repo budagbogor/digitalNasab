@@ -71,7 +71,7 @@ export default function MemberModal({ isOpen, onClose, onSave, editingMember, me
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(editingMember ? { ...formData, id: editingMember.id, ownerId: editingMember.ownerId, createdAt: editingMember.createdAt, updatedAt: new Date() } : formData);
+    onSave(editingMember ? { ...formData, id: editingMember.id, ownerId: editingMember.ownerId, createdAt: editingMember.createdAt, updatedAt: new Date().toISOString() } : formData);
   };
 
   return (

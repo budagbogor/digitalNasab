@@ -27,8 +27,15 @@ export interface FamilyMember {
   occupation?: string;
   education?: string;
   bio?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface GlobalSettings {
+  id: string;
+  aiProvider: 'gemini' | 'sumopod';
+  sumopodApiKey?: string;
+  updatedAt: string;
 }
 
 export type NewFamilyMember = Omit<FamilyMember, 'id' | 'ownerId' | 'createdAt' | 'updatedAt'>;

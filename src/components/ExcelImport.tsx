@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react';
-import { collection, writeBatch, doc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../firebase';
+import { supabase } from '../supabase';
 import { FileSpreadsheet, Download, Upload, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { UserRole } from '../types';
@@ -91,98 +90,92 @@ export default function ExcelImport({ userId, currentUserRole }: { userId: strin
           throw new Error('File Excel kosong atau format tidak sesuai.');
         }
 
-        // Create a map to store generated IDs for each person by their name
         const nameToIdMap = new Map<string, string>();
         const membersData: any[] = [];
 
-        // First pass: generate IDs and basic data
+        // First pass: prepare basic data
         for (const row of data) {
-          const id = doc(collection(db, 'members')).id;
           const rawFullName = row['Nama Lengkap'];
           const fullName = rawFullName ? String(rawFullName).trim().toUpperCase() : '';
           
           if (!fullName || fullName === '-' || fullName.includes('CONTOH NAMA')) continue;
 
-          nameToIdMap.set(fullName, id);
-
           const gender = row['Jenis Kelamin'] === 'L' ? 'male' : row['Jenis Kelamin'] === 'P' ? 'female' : 'male';
           const isAlive = row['Status'] === 'Hidup';
-          const birthDate = row['Tanggal Lahir'] && row['Tanggal Lahir'] !== '-' ? String(row['Tanggal Lahir']) : '';
-          const deathDate = row['Tanggal Wafat'] && row['Tanggal Wafat'] !== '-' ? String(row['Tanggal Wafat']) : '';
-          const phone = row['Telepon'] && row['Telepon'] !== '-' ? String(row['Telepon']) : '';
-          const address = row['Alamat'] && row['Alamat'] !== '-' ? String(row['Alamat']) : '';
-          const occupation = row['Pekerjaan'] && row['Pekerjaan'] !== '-' ? String(row['Pekerjaan']) : '';
-          const education = row['Pendidikan'] && row['Pendidikan'] !== '-' ? String(row['Pendidikan']) : '';
-          const bio = row['Bio'] && row['Bio'] !== '-' ? String(row['Bio']) : '';
+          const birthDate = row['Tanggal Lahir'] && row['Tanggal Lahir'] !== '-' ? String(row['Tanggal Lahir']) : null;
+          const deathDate = row['Tanggal Wafat'] && row['Tanggal Wafat'] !== '-' ? String(row['Tanggal Wafat']) : null;
+          const phone = row['Telepon'] && row['Telepon'] !== '-' ? String(row['Telepon']) : null;
+          const address = row['Alamat'] && row['Alamat'] !== '-' ? String(row['Alamat']) : null;
+          const occupation = row['Pekerjaan'] && row['Pekerjaan'] !== '-' ? String(row['Pekerjaan']) : null;
+          const education = row['Pendidikan'] && row['Pendidikan'] !== '-' ? String(row['Pendidikan']) : null;
+          const bio = row['Bio'] && row['Bio'] !== '-' ? String(row['Bio']) : null;
 
           membersData.push({
-            id,
-            ownerId: userId,
-            fullName,
+            owner_id: userId,
+            full_name: fullName,
             gender,
-            isAlive,
-            birthDate,
-            deathDate,
+            is_alive: isAlive,
+            birth_date: birthDate,
+            death_date: deathDate,
             phone,
             address,
             occupation,
             education,
             bio,
-            photoUrl: '',
-            parentId: '',
-            motherId: '',
-            spouseId: '',
-            rawFather: row['Nama Ayah'] ? String(row['Nama Ayah']).trim().toUpperCase() : '',
-            rawMother: row['Nama Ibu'] ? String(row['Nama Ibu']).trim().toUpperCase() : '',
-            rawSpouse: row['Nama Pasangan'] ? String(row['Nama Pasangan']).trim().toUpperCase() : '',
+            photo_url: '',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            _tempFather: row['Nama Ayah'] ? String(row['Nama Ayah']).trim().toUpperCase() : '',
+            _tempMother: row['Nama Ibu'] ? String(row['Nama Ibu']).trim().toUpperCase() : '',
+            _tempSpouse: row['Nama Pasangan'] ? String(row['Nama Pasangan']).trim().toUpperCase() : '',
           });
         }
 
-        // Second pass: resolve relationships and write to Firestore in batches
-        const batches = [];
-        let currentBatch = writeBatch(db);
-        let operationCount = 0;
-
-        for (const member of membersData) {
-          // Resolve Father
-          if (member.rawFather && member.rawFather !== '-') {
-            member.parentId = nameToIdMap.get(member.rawFather) || '';
-          }
-          // Resolve Mother
-          if (member.rawMother && member.rawMother !== '-') {
-            member.motherId = nameToIdMap.get(member.rawMother) || '';
-          }
-          // Resolve Spouse
-          if (member.rawSpouse && member.rawSpouse !== '-') {
-            member.spouseId = nameToIdMap.get(member.rawSpouse) || '';
-          }
-
-          const docRef = doc(db, 'members', member.id);
-          const { rawFather, rawMother, rawSpouse, ...cleanMember } = member;
+        // Insert members in chunks to avoid payload limits
+        const chunkSize = 100;
+        const insertedMembers: any[] = [];
+        for (let i = 0; i < membersData.length; i += chunkSize) {
+          const chunk = membersData.slice(i, i + chunkSize);
+          const { data: inserted, error } = await supabase
+            .from('members')
+            .insert(chunk.map(({ _tempFather, _tempMother, _tempSpouse, ...rest }) => rest))
+            .select();
           
-          currentBatch.set(docRef, {
-            ...cleanMember,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
+          if (error) throw error;
+          if (inserted) insertedMembers.push(...inserted);
+        }
 
-          operationCount++;
-          if (operationCount === 450) {
-            batches.push(currentBatch);
-            currentBatch = writeBatch(db);
-            operationCount = 0;
+        // Map names to IDs from inserted data
+        insertedMembers.forEach(m => nameToIdMap.set(m.full_name, m.id));
+
+        // Second pass: resolve relationships
+        for (let i = 0; i < membersData.length; i++) {
+          const member = insertedMembers[i];
+          const original = membersData[i];
+          const updates: any = {};
+
+          if (original._tempFather && original._tempFather !== '-') {
+            const fatherId = nameToIdMap.get(original._tempFather);
+            if (fatherId) updates.parent_id = fatherId;
+          }
+          if (original._tempMother && original._tempMother !== '-') {
+            const motherId = nameToIdMap.get(original._tempMother);
+            if (motherId) updates.mother_id = motherId;
+          }
+          if (original._tempSpouse && original._tempSpouse !== '-') {
+            const spouseId = nameToIdMap.get(original._tempSpouse);
+            if (spouseId) updates.spouse_id = spouseId;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            await supabase
+              .from('members')
+              .update(updates)
+              .eq('id', member.id);
           }
         }
 
-        if (operationCount > 0) {
-          batches.push(currentBatch);
-        }
-
-        for (const batch of batches) {
-          await batch.commit();
-        }
-
-        setMessage({ text: `Berhasil mengimpor ${membersData.length} anggota keluarga!`, type: 'success' });
+        setMessage({ text: `Berhasil mengimpor ${insertedMembers.length} anggota keluarga!`, type: 'success' });
         if (fileInputRef.current) fileInputRef.current.value = '';
       } catch (error) {
         console.error('Error importing excel:', error);

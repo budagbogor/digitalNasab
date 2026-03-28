@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, updateDoc, doc, query, orderBy } from 'firebase/firestore';
-import { db } from '../firebase';
+import { supabase } from '../supabase';
 import { AppUser, UserRole } from '../types';
-import { Shield, User, Check, X, Loader2, Search } from 'lucide-react';
+import { Shield, User, Loader2, Search } from 'lucide-react';
 
 export default function UserManagement({ currentUserRole }: { currentUserRole: UserRole }) {
   const [users, setUsers] = useState<AppUser[]>([]);
@@ -10,30 +9,55 @@ export default function UserManagement({ currentUserRole }: { currentUserRole: U
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
-    const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const usersData: AppUser[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        usersData.push({
-          ...data,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date(),
-        } as AppUser);
-      });
-      setUsers(usersData);
-      setIsLoading(false);
-    });
-    return () => unsubscribe();
+    fetchUsers();
+
+    // Subscribe to user changes
+    const channel = supabase
+      .channel('users_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
+        fetchUsers();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
+
+  const fetchUsers = async () => {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching users:', error);
+    } else if (data) {
+      const mappedUsers: AppUser[] = data.map(u => ({
+        uid: u.uid,
+        email: u.email,
+        role: u.role as UserRole,
+        displayName: u.display_name,
+        photoURL: u.photo_url,
+        createdAt: new Date(u.created_at),
+        updatedAt: new Date(u.updated_at),
+      }));
+      setUsers(mappedUsers);
+    }
+    setIsLoading(false);
+  };
 
   const handleUpdateRole = async (userId: string, newRole: UserRole) => {
     try {
-      const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, {
-        role: newRole,
-        updatedAt: new Date(),
-      });
+      const { error } = await supabase
+        .from('users')
+        .update({
+          role: newRole,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('uid', userId);
+      
+      if (error) throw error;
     } catch (error) {
       console.error('Error updating role:', error);
       alert('Gagal memperbarui role. Pastikan Anda memiliki izin admin.');
