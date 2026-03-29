@@ -27,10 +27,10 @@ export default function SettingsMenu({ currentUserRole }: { currentUserRole: str
     <>
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed top-6 right-6 p-4 bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-2xl shadow-2xl hover:bg-white/20 transition-all hover:scale-110 active:scale-95 group z-[100]"
+        className="p-2 text-emerald-300 hover:text-white hover:bg-white/10 rounded-lg transition-all active:scale-95 group"
         title="Pengaturan"
       >
-        <Settings className="w-6 h-6 group-hover:rotate-90 transition-transform duration-500" />
+        <Settings className="w-4 h-4 md:w-5 h-5 group-hover:rotate-90 transition-transform duration-500" />
       </button>
 
       <AnimatePresence>
