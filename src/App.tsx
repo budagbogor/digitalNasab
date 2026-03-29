@@ -158,11 +158,11 @@ function AppContent() {
       {/* Header */}
       <header className="bg-emerald-900 text-white shadow-2xl z-20 sticky top-0 border-b border-emerald-800/50">
         <div className="max-w-7xl mx-auto px-4 h-auto lg:h-20 py-3 lg:py-0">
-          <div className="flex flex-col lg:grid lg:grid-cols-3 items-center h-full gap-4 lg:gap-0">
+          <div className="flex flex-col lg:flex-row items-center justify-between h-full gap-4 lg:gap-6">
             
             {/* 1. BRAND AREA (LOGO) - LEFT */}
-            <div className="flex items-center gap-3 w-full lg:w-auto justify-center lg:justify-start">
-              <div className="bg-emerald-700 p-2 rounded-xl shadow-inner border border-emerald-600/50 transform -rotate-2 hover:rotate-0 transition-all duration-300 shrink-0">
+            <div className="flex items-center gap-3 shrink-0">
+              <div className="bg-emerald-700 p-2 rounded-xl shadow-inner border border-emerald-600/50 transform -rotate-2 hover:rotate-0 transition-all duration-300">
                 <Users className="w-6 h-6 text-emerald-100" />
               </div>
               <div className="text-right flex flex-col justify-center min-w-[120px]" dir="rtl">
@@ -172,7 +172,7 @@ function AppContent() {
             </div>
 
             {/* 2. NAVIGATION CENTER */}
-            <div className="flex justify-center w-full">
+            <div className="flex justify-center flex-1 min-w-0">
               <div className="flex items-center bg-emerald-950/40 backdrop-blur-md rounded-xl p-1 border border-emerald-700/30 shadow-inner max-sm:overflow-x-auto no-scrollbar">
                 <div className="flex items-center gap-0.5 min-w-max">
                   <button
@@ -182,7 +182,7 @@ function AppContent() {
                     }`}
                   >
                     <LayoutGrid className="w-3.5 h-3.5" />
-                    <span>Silsilah</span>
+                    <span className="hidden sm:inline">Silsilah</span>
                   </button>
                   <button
                     onClick={() => setViewMode('directory')}
@@ -191,7 +191,7 @@ function AppContent() {
                     }`}
                   >
                     <List className="w-3.5 h-3.5" />
-                    <span>Direktori</span>
+                    <span className="hidden sm:inline">Direktori</span>
                   </button>
                   <button
                     onClick={() => setViewMode('stats')}
@@ -200,7 +200,7 @@ function AppContent() {
                     }`}
                   >
                     <BarChart2 className="w-3.5 h-3.5" />
-                    <span>Statistik</span>
+                    <span className="hidden sm:inline">Statistik</span>
                   </button>
                   <button
                     onClick={() => setViewMode('forum')}
@@ -209,7 +209,7 @@ function AppContent() {
                     }`}
                   >
                     <MessageSquare className="w-3.5 h-3.5" />
-                    <span>Forum</span>
+                    <span className="hidden sm:inline">Forum</span>
                   </button>
                   {userRole === 'admin' && (
                     <button
@@ -219,7 +219,7 @@ function AppContent() {
                       }`}
                     >
                       <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>Akses</span>
+                      <span className="hidden sm:inline">Akses</span>
                     </button>
                   )}
                 </div>
@@ -227,13 +227,13 @@ function AppContent() {
             </div>
 
             {/* 3. ACTION AREA RIGHT */}
-            <div className="flex items-center gap-3 w-full lg:w-auto justify-center lg:justify-end">
-              <div className="flex items-center gap-3 shrink-0">
-                <div className="hidden sm:flex flex-col items-end pr-2 border-r border-emerald-800/50">
+            <div className="flex items-center gap-2 lg:gap-3 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="hidden xl:flex flex-col items-end pr-3 border-r border-emerald-800/50">
                   <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest leading-none mb-0.5">
                     {userRole === 'admin' ? 'Administrator' : 'Keluarga'}
                   </span>
-                  <span className="text-[10px] font-medium text-white/60 truncate max-w-[120px]">
+                  <span className="text-[10px] font-medium text-white/70 truncate max-w-[100px]">
                     {user?.email}
                   </span>
                 </div>
@@ -243,17 +243,17 @@ function AppContent() {
                     <ExcelImport userId={user?.id || 'admin'} currentUserRole={userRole} isCompact={true} />
                     <button
                       onClick={() => { setEditingMember(null); setIsMemberModalOpen(true); }}
-                      className="flex items-center gap-1 bg-amber-500 hover:bg-amber-400 text-amber-950 px-2 py-1.5 rounded-lg text-[10px] font-black transition-all shadow-md active:scale-95 border border-amber-400/50 uppercase"
+                      className="flex items-center gap-1 bg-amber-500 hover:bg-amber-400 text-amber-950 px-2 py-1.5 rounded-lg text-[10px] font-black transition-all shadow-md active:scale-95 border border-amber-400/50 uppercase whitespace-nowrap"
                       title="Tambah Data Anggota"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span className="hidden xl:inline">Tambah Data</span>
+                      <span className="hidden md:inline lg:hidden xl:inline">Tambah Data</span>
                     </button>
                   </div>
                 )}
               </div>
               
-              <div className="flex items-center gap-2 pl-2 lg:border-l border-emerald-800/50">
+              <div className="flex items-center gap-2 pl-2 border-l border-emerald-800/50">
                 <SettingsMenu currentUserRole={userRole} />
                 <button 
                   onClick={() => getSupabaseClient().auth.signOut()}
