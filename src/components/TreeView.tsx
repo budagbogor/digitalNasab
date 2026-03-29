@@ -176,15 +176,13 @@ const CustomNode = ({ data }: { data: any }) => {
       </div>
 
       <div className="absolute -top-3 -right-3 flex gap-1">
-        {isAdmin && (
-          <button 
-            onClick={(e) => { e.stopPropagation(); onEditClick(member); }}
-            className="p-2 text-gray-600 hover:text-emerald-600 transition-colors bg-white rounded-full shadow-md border-2 border-gray-200 hover:border-emerald-400"
-            title="Edit"
-          >
-            <Edit2 className="w-4 h-4" />
-          </button>
-        )}
+        <button 
+          onClick={(e) => { e.stopPropagation(); onEditClick(member); }}
+          className="p-2 text-gray-600 hover:text-emerald-600 transition-colors bg-white rounded-full shadow-md border-2 border-gray-200 hover:border-emerald-400"
+          title="Edit"
+        >
+          <Edit2 className="w-4 h-4" />
+        </button>
       </div>
     </div>
   );

@@ -140,32 +140,30 @@ export default function ProfileModal({ isOpen, onClose, member, members, onEdit,
             </a>
           )}
 
-          {isAdmin && (
-            <div className="flex gap-3">
-              {onEdit && (
-                <button
-                  onClick={() => { onClose(); onEdit(member); }}
-                  className="flex-1 flex items-center justify-center gap-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 py-3 px-6 rounded-xl transition-colors font-medium"
-                >
-                  <Edit2 className="w-4 h-4" />
-                  Edit Data
-                </button>
-              )}
-              {onDelete && (
-                <button
-                  onClick={() => {
-                    if (window.confirm('Apakah Anda yakin ingin menghapus anggota keluarga ini?')) {
-                      onDelete(member.id);
-                    }
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 bg-red-100 hover:bg-red-200 text-red-700 py-3 px-6 rounded-xl transition-colors font-medium"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Hapus
-                </button>
-              )}
-            </div>
-          )}
+          <div className="flex gap-3">
+            {onEdit && (
+              <button
+                onClick={() => { onClose(); onEdit(member); }}
+                className="flex-1 flex items-center justify-center gap-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 py-3 px-6 rounded-xl transition-colors font-medium border border-emerald-300/30"
+              >
+                <Edit2 className="w-4 h-4" />
+                Edit Data
+              </button>
+            )}
+            {isAdmin && onDelete && (
+              <button
+                onClick={() => {
+                  if (window.confirm('Apakah Anda yakin ingin menghapus anggota keluarga ini?')) {
+                    onDelete(member.id);
+                  }
+                }}
+                className="flex-1 flex items-center justify-center gap-2 bg-red-100 hover:bg-red-200 text-red-700 py-3 px-6 rounded-xl transition-colors font-medium border border-red-300/30"
+              >
+                <Trash2 className="w-4 h-4" />
+                Hapus
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -6,10 +6,11 @@ interface DirectoryViewProps {
   members: FamilyMember[];
   onEdit: (member: FamilyMember) => void;
   onDelete: (memberId: string) => void;
+  onMemberClick: (member: FamilyMember) => void;
   currentUserRole: UserRole;
 }
 
-export default function DirectoryView({ members, onEdit, onDelete, currentUserRole }: DirectoryViewProps) {
+export default function DirectoryView({ members, onEdit, onDelete, onMemberClick, currentUserRole }: DirectoryViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const isAdmin = currentUserRole === 'admin';
 
@@ -49,7 +50,8 @@ export default function DirectoryView({ members, onEdit, onDelete, currentUserRo
               {filteredMembers.map((member) => (
                 <div 
                   key={member.id}
-                  className="flex items-center gap-4 p-4 bg-white border-2 border-gray-100 rounded-2xl hover:border-emerald-200 hover:shadow-md transition-all group"
+                  onClick={() => onMemberClick(member)}
+                  className="flex items-center gap-4 p-4 bg-white border-2 border-gray-100 rounded-2xl hover:border-emerald-200 hover:shadow-md transition-all group cursor-pointer"
                 >
                   {/* Avatar */}
                   <div className="flex-shrink-0">
@@ -107,19 +109,18 @@ export default function DirectoryView({ members, onEdit, onDelete, currentUserRo
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  {isAdmin && (
-                    <div className="flex items-center gap-2 transition-opacity">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEdit(member);
-                        }}
-                        className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors bg-gray-50"
-                        title="Edit"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
+                  <div className="flex items-center gap-2 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdit(member);
+                      }}
+                      className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors bg-gray-50"
+                      title="Edit"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    {isAdmin && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -131,8 +132,8 @@ export default function DirectoryView({ members, onEdit, onDelete, currentUserRo
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

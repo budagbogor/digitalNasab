@@ -42,3 +42,14 @@ export interface AIConfig {
   autoSwitch: boolean;
   updatedAt: Date;
 }
+
+export type ForumCategory = 'Pengumuman' | 'Update Data' | 'Acara Keluarga' | 'Urunan & Iuran' | 'Obrolan Umum';
+
+export interface ForumPost {
+  id: string;
+  user_id: string;
+  user_email: string;
+  content: string;
+  category: ForumCategory;
+  created_at: string;
+}

@@ -1,40 +1,24 @@
 import { useState, useRef, useEffect } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase';
 import { MessageSquare, X, Send, Loader2, Sparkles, AlertCircle } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { FamilyMember, AIConfig, AIModel } from '../types';
+import { FamilyMember } from '../types';
+import { useSettings } from '../contexts/SettingsContext';
 
 interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
 }
 
-const MODEL_ORDER: AIModel[] = ['glm-5', 'seed-2.0-mini', 'seed-1.8', 'deepseek-3.2'];
-
 export default function Chatbot({ members }: { members: FamilyMember[] }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [aiConfig, setAiConfig] = useState<AIConfig | null>(null);
+  const { settings, isConfigured } = useSettings();
   const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', content: 'Assalamu\'alaikum. Saya Asisten Nasab Anda. Ada yang ingin Anda tanyakan mengenai anggota keluarga Anda?' }
+    { role: 'assistant', content: 'Assalamu\'alaikum. Saya Asisten Nasab (Powered by Sumopod). Ada yang ingin Anda tanyakan mengenai silsilah keluarga Anda?' }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [currentModel, setCurrentModel] = useState<AIModel | null>(null);
   const [errorStatus, setErrorStatus] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // Sync AI Config from Firestore
-  useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, 'settings', 'ai'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data() as AIConfig;
-        setAiConfig(data);
-        setCurrentModel(data.defaultModel);
-      }
-    });
-    return () => unsubscribe();
-  }, []);
 
   const familyContext = members.map(m => {
     const father = members.find(f => f.id === m.parentId)?.fullName || 'Tidak diketahui';
@@ -58,17 +42,18 @@ export default function Chatbot({ members }: { members: FamilyMember[] }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const callAI = async (model: AIModel, history: Message[]): Promise<string> => {
-    if (!aiConfig) throw new Error('AI Configuration not loaded');
+  const callAI = async (history: Message[]): Promise<string> => {
+    if (!isConfigured) throw new Error('Konfigurasi API belum lengkap.');
 
-    const response = await fetch(`${aiConfig.baseUrl}/chat/completions`, {
+    const baseUrl = settings.sumopodBaseUrl || 'https://ai.sumopod.com/v1';
+    const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${aiConfig.apiKey}`
+        'Authorization': `Bearer ${settings.sumopodApiKey}`
       },
       body: JSON.stringify({
-        model: model,
+        model: settings.sumopodModel,
         messages: [
           {
             role: 'system',
@@ -80,6 +65,7 @@ TUGAS UTAMA:
 3. Jika pengguna bertanya tentang seseorang yang TIDAK ada dalam data, jawablah dengan sopan bahwa orang tersebut tidak ditemukan dalam catatan silsilah saat ini.
 4. Gunakan bahasa Indonesia yang sangat sopan, profesional, dan bernuansa Islami.
 5. Jika ditanya tentang hubungan (misal: "Siapa kakek dari X?"), analisis data ayah/ibu secara mendalam untuk memberikan jawaban yang benar.
+6. Anda berjalan menggunakan infrastruktur Sumopod AI.
 
 DATA SILSILAH KELUARGA SAAT INI:
 ${familyContext || 'Belum ada data anggota keluarga yang dimasukkan.'}`
@@ -101,7 +87,7 @@ ${familyContext || 'Belum ada data anggota keluarga yang dimasukkan.'}`
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading || !aiConfig) return;
+    if (!input.trim() || isLoading) return;
 
     const userMsg = input.trim();
     setInput('');
@@ -110,36 +96,15 @@ ${familyContext || 'Belum ada data anggota keluarga yang dimasukkan.'}`
     setMessages(newMessages);
     setIsLoading(true);
 
-    let modelToTry = aiConfig.defaultModel;
-    let attemptCount = 0;
-    const maxAttempts = aiConfig.autoSwitch ? MODEL_ORDER.length : 1;
-    
-    // Find index of starting model
-    let currentIndex = MODEL_ORDER.indexOf(modelToTry);
-
-    while (attemptCount < maxAttempts) {
-      try {
-        setCurrentModel(modelToTry);
-        const text = await callAI(modelToTry, newMessages.filter(m => m.role !== 'system'));
-        setMessages(prev => [...prev, { role: 'assistant', content: text }]);
-        setIsLoading(false);
-        return;
-      } catch (error) {
-        console.error(`Error with model ${modelToTry}:`, error);
-        attemptCount++;
-        
-        if (aiConfig.autoSwitch && attemptCount < maxAttempts) {
-          // Switch to next model in order
-          currentIndex = (currentIndex + 1) % MODEL_ORDER.length;
-          modelToTry = MODEL_ORDER[currentIndex];
-          setErrorStatus(`Model ${MODEL_ORDER[(currentIndex - 1 + MODEL_ORDER.length) % MODEL_ORDER.length]} gagal. Mencoba ${modelToTry}...`);
-        } else {
-          setMessages(prev => [...prev, { role: 'assistant', content: 'Mohon maaf, layanan AI sedang tidak tersedia atau API Key tidak valid. Silakan hubungi Admin.' }]);
-          setIsLoading(false);
-          setErrorStatus('Gagal menghubungkan ke layanan AI.');
-          return;
-        }
-      }
+    try {
+      const text = await callAI(newMessages);
+      setMessages(prev => [...prev, { role: 'assistant', content: text }]);
+      setIsLoading(false);
+    } catch (error: any) {
+      console.error(`AI Error:`, error);
+      setMessages(prev => [...prev, { role: 'assistant', content: `Mohon maaf, terjadi kesalahan: ${error.message}. Silakan cek pengaturan API Key Sumopod Anda.` }]);
+      setIsLoading(false);
+      setErrorStatus(error.message);
     }
   };
 
@@ -162,12 +127,10 @@ ${familyContext || 'Belum ada data anggota keluarga yang dimasukkan.'}`
             </div>
             <div>
               <h3 className="font-bold text-lg leading-none">Asisten Nasab</h3>
-              {aiConfig && (
-                <div className="flex items-center gap-1.5 mt-1">
-                  <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
-                  <span className="text-[10px] text-emerald-200 font-medium uppercase tracking-wider">{currentModel}</span>
-                </div>
-              )}
+              <div className="flex items-center gap-1.5 mt-1">
+                <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
+                <span className="text-[10px] text-emerald-200 font-medium uppercase tracking-wider">{settings.sumopodModel || 'SUMOPOD AI'}</span>
+              </div>
             </div>
           </div>
           <button onClick={() => setIsOpen(false)} className="p-2 hover:bg-white/10 rounded-xl transition-colors relative z-10">
@@ -194,7 +157,7 @@ ${familyContext || 'Belum ada data anggota keluarga yang dimasukkan.'}`
             <div className="flex justify-start animate-pulse">
               <div className="bg-white border border-emerald-100 p-4 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-3 text-emerald-600">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span className="text-xs font-bold uppercase tracking-widest">{errorStatus ? 'Beralih Model...' : 'Mengetik...'}</span>
+                <span className="text-xs font-bold uppercase tracking-widest">Mengetik...</span>
               </div>
             </div>
           )}
@@ -202,7 +165,7 @@ ${familyContext || 'Belum ada data anggota keluarga yang dimasukkan.'}`
             <div className="flex justify-center">
               <div className="bg-amber-50 text-amber-700 text-[10px] px-3 py-1.5 rounded-full border border-amber-200 flex items-center gap-2">
                 <AlertCircle className="w-3 h-3" />
-                {errorStatus}
+                Gagal menghubungi Sumopod AI
               </div>
             </div>
           )}
@@ -211,9 +174,9 @@ ${familyContext || 'Belum ada data anggota keluarga yang dimasukkan.'}`
 
         {/* Input */}
         <div className="p-4 bg-white border-t border-emerald-50 rounded-b-3xl">
-          {!aiConfig?.apiKey ? (
-            <div className="bg-red-50 p-3 rounded-2xl border border-red-100 text-center">
-              <p className="text-[11px] text-red-600 font-medium">API Key belum dikonfigurasi oleh Admin.</p>
+          {!isConfigured ? (
+            <div className="bg-amber-50 p-3 rounded-2xl border border-amber-100 text-center">
+              <p className="text-[11px] text-amber-600 font-medium">Buka menu pengaturan untuk mengaktifkan AI.</p>
             </div>
           ) : (
             <form onSubmit={handleSend} className="flex items-center gap-2 bg-gray-50 rounded-2xl border border-gray-100 p-1.5 focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-500/10 transition-all">

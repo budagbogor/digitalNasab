@@ -1,8 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, deleteDoc, setDoc, getDoc, getDocFromServer } from 'firebase/firestore';
-import { auth, db } from './firebase';
-import { FamilyMember, NewFamilyMember, UserRole, AppUser } from './types';
+import { useState, useEffect } from 'react';
+import { getSupabaseClient } from './lib/supabase';
+// ... sisanya tetap sama
+import { FamilyMember, NewFamilyMember, UserRole } from './types';
 import Auth from './components/Auth';
 import TreeView from './components/TreeView';
 import DirectoryView from './components/DirectoryView';
@@ -12,68 +11,13 @@ import ProfileModal from './components/ProfileModal';
 import Chatbot from './components/Chatbot';
 import ExcelImport from './components/ExcelImport';
 import StatsView from './components/StatsView';
-import AISettings from './components/AISettings';
-import { LogOut, Plus, Users, Loader2, LayoutGrid, List, Share2, ShieldCheck, BarChart2, Sparkles } from 'lucide-react';
-
-enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
-
-interface FirestoreErrorInfo {
-  error: string;
-  operationType: OperationType;
-  path: string | null;
-  authInfo: {
-    userId: string | undefined;
-    email: string | null | undefined;
-    emailVerified: boolean | undefined;
-    isAnonymous: boolean | undefined;
-    tenantId: string | null | undefined;
-    providerInfo: any[];
-  }
-}
-
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
-    },
-    operationType,
-    path
-  }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
+import SettingsMenu from './components/SettingsMenu';
+import IslamicWelcome from './components/IslamicWelcome';
+import ForumView from './components/ForumView';
+import { SettingsProvider, useSettings } from './contexts/SettingsContext';
+import { LogOut, Plus, Users, Loader2, LayoutGrid, List, BarChart2, ShieldCheck, Share2, MessageSquare } from 'lucide-react';
 
 function ErrorFallback({ error }: { error: Error }) {
-  let displayMessage = "Terjadi kesalahan yang tidak terduga.";
-  try {
-    const errInfo = JSON.parse(error.message) as FirestoreErrorInfo;
-    if (errInfo.error.includes('insufficient permissions')) {
-      displayMessage = `Izin ditolak untuk operasi ${errInfo.operationType} pada ${errInfo.path}. Silakan periksa aturan keamanan Anda.`;
-    } else {
-      displayMessage = errInfo.error;
-    }
-  } catch (e) {
-    displayMessage = error.message;
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center">
@@ -81,7 +25,7 @@ function ErrorFallback({ error }: { error: Error }) {
           <Share2 className="w-8 h-8" />
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Oops! Ada Masalah</h2>
-        <p className="text-gray-600 mb-6">{displayMessage}</p>
+        <p className="text-gray-600 mb-6">{error.message}</p>
         <button
           onClick={() => window.location.reload()}
           className="w-full bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-colors"
@@ -93,181 +37,168 @@ function ErrorFallback({ error }: { error: Error }) {
   );
 }
 
-export default function App() {
+function AppContent() {
   const [user, setUser] = useState<any>(null);
-  const [userRole, setUserRole] = useState<UserRole>('viewer');
-  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [userRole, setUserRole] = useState<UserRole>('viewer'); // Default adalah viewer demi keamanan
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
   const [editingMember, setEditingMember] = useState<FamilyMember | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'tree' | 'directory' | 'users' | 'stats' | 'ai_settings'>('tree');
+  const [viewMode, setViewMode] = useState<'tree' | 'directory' | 'users' | 'stats' | 'forum'>('tree');
   const [appError, setAppError] = useState<Error | null>(null);
+  const [hasSeenWelcome, setHasSeenWelcome] = useState(false);
+  const { settings, isConfigured } = useSettings();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        // Fetch user role
-        const userRef = doc(db, 'users', currentUser.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          setUserRole(userSnap.data().role as UserRole);
-        } else {
-          // Default roles for specific emails if doc doesn't exist
-          const adminEmails = ['mobeng.ho@gmail.com', 'budagbogor@gmail.com'];
-          setUserRole(adminEmails.includes(currentUser.email || '') ? 'admin' : 'viewer');
-        }
-      }
-      setIsAuthReady(true);
+    if (!isConfigured) return;
+
+    const client = getSupabaseClient();
+    
+    // Check session
+    client.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
     });
-    return () => unsubscribe();
-  }, []);
+
+    const { data: { subscription } } = client.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (!session) setUserRole('viewer');
+    });
+
+    return () => subscription.unsubscribe();
+  }, [isConfigured]);
+
+  // Fetch User Role
+  useEffect(() => {
+    if (!user || !isConfigured) return;
+
+    const fetchRole = async () => {
+      const client = getSupabaseClient();
+      const { data, error } = await client
+        .from('users')
+        .select('role')
+        .eq('uid', user.id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user role:', error);
+      } else if (data) {
+        setUserRole(data.role as UserRole);
+      }
+    };
+
+    fetchRole();
+  }, [user, isConfigured]);
 
   useEffect(() => {
-    if (isAuthReady && user) {
-      // Listen for role changes in real-time
-      const userRef = doc(db, 'users', user.uid);
-      const unsubscribeRole = onSnapshot(userRef, (doc) => {
-        if (doc.exists()) {
-          setUserRole(doc.data().role as UserRole);
-        }
-      });
-
-      // Test connection to Firestore
-      const testConnection = async () => {
-        try {
-          await getDocFromServer(doc(db, 'test', 'connection'));
-        } catch (error) {
-          if (error instanceof Error && error.message.includes('the client is offline')) {
-            console.error("Please check your Firebase configuration.");
-          }
-        }
-      };
-      testConnection();
-
-      const q = query(collection(db, 'members')); // Admins and viewers can see all members in a shared tree
-      const unsubscribeMembers = onSnapshot(q, (snapshot) => {
-        const membersData: FamilyMember[] = [];
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          membersData.push({
-            ...data,
-            id: doc.id,
-            createdAt: data.createdAt?.toDate() || new Date(),
-            updatedAt: data.updatedAt?.toDate() || new Date(),
-          } as FamilyMember);
-        });
-        setMembers(membersData);
-        setIsLoading(false);
-      }, (error) => {
-        try {
-          handleFirestoreError(error, OperationType.LIST, 'members');
-        } catch (e) {
-          setAppError(e as Error);
-        }
-        setIsLoading(false);
-      });
-      return () => {
-        unsubscribeRole();
-        unsubscribeMembers();
-      };
-    } else if (isAuthReady && !user) {
-      setMembers([]);
+    if (!isConfigured) {
       setIsLoading(false);
+      return;
     }
-  }, [user, isAuthReady]);
+
+    const client = getSupabaseClient();
+    
+    // Fetch members
+    const fetchMembers = async () => {
+      setIsLoading(true);
+      const { data, error } = await client
+        .from('family_members')
+        .select('*')
+        .order('fullName', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching members:', error);
+      } else {
+        setMembers(data as FamilyMember[]);
+      }
+      setIsLoading(false);
+    };
+
+    fetchMembers();
+
+    // Realtime subscription
+    const channel = client
+      .channel('family_members_changes')
+      .on('postgres_changes' as any, { event: '*', table: 'family_members' }, () => {
+        fetchMembers();
+      })
+      .subscribe();
+
+    return () => {
+      client.removeChannel(channel);
+    };
+  }, [isConfigured]);
 
   const handleSaveMember = async (memberData: NewFamilyMember | FamilyMember) => {
-    if (!user) return;
+    // Catatan: Izin edit untuk viewer sekarang diverifikasi menggunakan password di handleEditClick
+    // Admin tetap memiliki akses penuh tanpa password.
     
-    const path = 'members';
+    const client = getSupabaseClient();
     const dataToSave = {
       ...memberData,
       fullName: memberData.fullName.toUpperCase(),
+      updatedAt: new Date().toISOString(),
+      // Pastikan UUID tidak dikirim sebagai string kosong "" karena akan ditolak Database
+      parentId: memberData.parentId || null,
+      motherId: memberData.motherId || null,
+      spouseId: memberData.spouseId || null,
     };
 
     try {
-      let memberId = '';
       if ('id' in memberData && memberData.id) {
         // Update
-        memberId = memberData.id;
-        const docRef = doc(db, path, memberId);
-        await updateDoc(docRef, {
-          ...dataToSave,
-          updatedAt: new Date(),
-        });
+        const { error } = await client
+          .from('family_members')
+          .update(dataToSave)
+          .eq('id', memberData.id);
+        if (error) throw error;
       } else {
         // Create
-        const membersRef = collection(db, path);
-        const newDocRef = doc(membersRef);
-        memberId = newDocRef.id;
-        await setDoc(newDocRef, {
-          ...dataToSave,
-          id: memberId,
-          ownerId: user.uid,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-      }
-
-      // Handle Bidirectional Spouse Relationship
-      if (dataToSave.spouseId) {
-        const spouseRef = doc(db, path, dataToSave.spouseId);
-        await updateDoc(spouseRef, {
-          spouseId: memberId,
-          updatedAt: new Date(),
-        });
-      } else {
-        // If spouse was removed, clear it from the previous spouse
-        const previousSpouse = members.find(m => m.spouseId === memberId && m.id !== dataToSave.spouseId);
-        if (previousSpouse) {
-          const prevSpouseRef = doc(db, path, previousSpouse.id);
-          await updateDoc(prevSpouseRef, {
-            spouseId: null,
-            updatedAt: new Date(),
-          });
-        }
+        const { error } = await client
+          .from('family_members')
+          .insert([{ ...dataToSave, createdAt: new Date().toISOString() }]);
+        if (error) throw error;
       }
 
       setIsMemberModalOpen(false);
       setEditingMember(null);
-    } catch (error) {
-      try {
-        handleFirestoreError(error, ('id' in memberData ? OperationType.UPDATE : OperationType.CREATE), path);
-      } catch (e) {
-        setAppError(e as Error);
-      }
+    } catch (error: any) {
+      setAppError(new Error(error.message));
     }
   };
 
   const handleEditClick = (member: FamilyMember) => {
+    const { familyEditPassword } = settings;
+    
+    if (userRole !== 'admin') {
+      const inputPassword = prompt(`Masukkan Password Update Keluarga untuk mengedit data ${member.fullName}:`);
+      if (inputPassword !== familyEditPassword) {
+        alert('Password Salah! Silakan hubungi Admin untuk mendapatkan password update.');
+        return;
+      }
+    }
+    
     setEditingMember(member);
     setIsMemberModalOpen(true);
   };
 
   const handleDeleteMember = async (memberId: string) => {
-    const path = `members/${memberId}`;
-    try {
-      // Clear references in other members before deleting
-      const updates = members.map(async (m) => {
-        const mRef = doc(db, 'members', m.id);
-        if (m.parentId === memberId) await updateDoc(mRef, { parentId: null });
-        if (m.motherId === memberId) await updateDoc(mRef, { motherId: null });
-        if (m.spouseId === memberId) await updateDoc(mRef, { spouseId: null });
-      });
-      await Promise.all(updates);
+    if (userRole !== 'admin') {
+      alert('Akses Ditolak: Hanya Admin yang dapat menghapus data.');
+      return;
+    }
 
-      await deleteDoc(doc(db, 'members', memberId));
+    const client = getSupabaseClient();
+    try {
+      const { error } = await client
+        .from('family_members')
+        .delete()
+        .eq('id', memberId);
+      if (error) throw error;
       setIsProfileModalOpen(false);
-    } catch (error) {
-      try {
-        handleFirestoreError(error, OperationType.DELETE, path);
-      } catch (e) {
-        setAppError(e as Error);
-      }
+    } catch (error: any) {
+      setAppError(new Error(error.message));
     }
   };
 
@@ -276,147 +207,150 @@ export default function App() {
     setIsProfileModalOpen(true);
   };
 
-  if (!isAuthReady) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-emerald-50">
-        <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
-      </div>
-    );
-  }
-
   if (appError) {
     return <ErrorFallback error={appError} />;
   }
 
-  if (!user) {
+  // Tampilkan layar Login jika belum masuk
+  if (!user && isConfigured) {
     return <Auth />;
+  }
+
+  // Tampilkan Animasi Pembuka Islami jika baru masuk
+  if (user && !hasSeenWelcome && isConfigured) {
+    return <IslamicWelcome onComplete={() => setHasSeenWelcome(true)} />;
   }
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 font-sans">
+      <SettingsMenu currentUserRole={userRole} />
+      
       {/* Header */}
-      <header className="bg-emerald-800 text-white shadow-lg z-20 sticky top-0">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center py-3 md:h-20 gap-4 md:gap-0">
-            {/* Left: Logo & Title */}
-            <div className="flex items-center gap-3 w-full md:w-auto">
-              <div className="bg-emerald-700 p-2.5 rounded-xl shadow-inner">
+      <header className="bg-emerald-900 text-white shadow-2xl z-20 sticky top-0 border-b border-emerald-800/50">
+        <div className="max-w-7xl mx-auto px-4 h-auto lg:h-20 py-3 lg:py-0">
+          <div className="flex flex-col lg:grid lg:grid-cols-3 items-center h-full gap-4 lg:gap-0">
+            
+            {/* 1. BRAND AREA (LOGO) - LEFT */}
+            <div className="flex items-center gap-3 w-full lg:w-auto justify-center lg:justify-start">
+              <div className="bg-emerald-700 p-2 rounded-xl shadow-inner border border-emerald-600/50 transform -rotate-2 hover:rotate-0 transition-all duration-300 shrink-0">
                 <Users className="w-6 h-6 text-emerald-100" />
               </div>
-              <div>
-                <h1 className="text-xl font-bold tracking-tight leading-none">Digital Nasab</h1>
-                <p className="text-[10px] text-emerald-300 mt-1 uppercase tracking-widest font-semibold hidden sm:block">Silsilah Keluarga Digital</p>
+              <div className="text-right flex flex-col justify-center min-w-[120px]" dir="rtl">
+                <h1 className="text-2xl md:text-3xl font-normal tracking-tight leading-7 drop-shadow-sm font-arabic m-0">شجرة النسب الرقمية</h1>
+                <p className="text-[10px] md:text-xs text-emerald-400 font-medium tracking-normal opacity-90 font-arabic m-0 -mt-1">سلسلة إيـمـan ديـهـارجـو</p>
               </div>
             </div>
-            
-            {/* Center: Navigation Toggles */}
-            <div className="flex items-center bg-emerald-900/50 backdrop-blur-sm rounded-xl p-1 border border-emerald-700/50 shadow-inner">
-              <button
-                onClick={() => setViewMode('tree')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${
-                  viewMode === 'tree' 
-                    ? 'bg-emerald-600 text-white shadow-md scale-105' 
-                    : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
-                }`}
-              >
-                <LayoutGrid className="w-4 h-4" />
-                <span className="hidden sm:inline">Pohon</span>
-              </button>
-              <button
-                onClick={() => setViewMode('directory')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${
-                  viewMode === 'directory' 
-                    ? 'bg-emerald-600 text-white shadow-md scale-105' 
-                    : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
-                }`}
-              >
-                <List className="w-4 h-4" />
-                <span className="hidden sm:inline">Direktori</span>
-              </button>
-              <button
-                onClick={() => setViewMode('stats')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${
-                  viewMode === 'stats' 
-                    ? 'bg-emerald-600 text-white shadow-md scale-105' 
-                    : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
-                }`}
-              >
-                <BarChart2 className="w-4 h-4" />
-                <span className="hidden sm:inline">Statistik</span>
-              </button>
-              {userRole === 'admin' && (
-                <button
-                  onClick={() => setViewMode('users')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${
-                    viewMode === 'users' 
-                      ? 'bg-emerald-600 text-white shadow-md scale-105' 
-                      : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
-                  }`}
-                >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span className="hidden sm:inline">User</span>
-                </button>
-              )}
-              {userRole === 'admin' && (
-                <button
-                  onClick={() => setViewMode('ai_settings')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${
-                    viewMode === 'ai_settings' 
-                      ? 'bg-amber-600 text-white shadow-md scale-105' 
-                      : 'text-amber-200 hover:text-white hover:bg-amber-800/50'
-                  }`}
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span className="hidden sm:inline">AI Config</span>
-                </button>
-              )}
+
+            {/* 2. NAVIGATION CENTER */}
+            <div className="flex justify-center w-full">
+              <div className="flex items-center bg-emerald-950/40 backdrop-blur-md rounded-xl p-1 border border-emerald-700/30 shadow-inner max-sm:overflow-x-auto no-scrollbar">
+                <div className="flex items-center gap-0.5 min-w-max">
+                  <button
+                    onClick={() => setViewMode('tree')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${
+                      viewMode === 'tree' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                    }`}
+                  >
+                    <LayoutGrid className="w-3.5 h-3.5" />
+                    <span>Silsilah</span>
+                  </button>
+                  <button
+                    onClick={() => setViewMode('directory')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${
+                      viewMode === 'directory' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                    }`}
+                  >
+                    <List className="w-3.5 h-3.5" />
+                    <span>Direktori</span>
+                  </button>
+                  <button
+                    onClick={() => setViewMode('stats')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${
+                      viewMode === 'stats' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                    }`}
+                  >
+                    <BarChart2 className="w-3.5 h-3.5" />
+                    <span>Statistik</span>
+                  </button>
+                  <button
+                    onClick={() => setViewMode('forum')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${
+                      viewMode === 'forum' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                    }`}
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Forum</span>
+                  </button>
+                  {userRole === 'admin' && (
+                    <button
+                      onClick={() => setViewMode('users')}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${
+                        viewMode === 'users' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                      }`}
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Akses</span>
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
-            {/* Right: Actions */}
-            <div className="flex items-center gap-2 w-full md:w-auto justify-center md:justify-end">
-              <div className="hidden lg:block mr-2">
-                <ExcelImport userId={user.uid} currentUserRole={userRole} />
+            {/* 3. ACTION AREA RIGHT */}
+            <div className="flex items-center gap-3 w-full lg:w-auto justify-center lg:justify-end">
+              <div className="flex items-center gap-3 shrink-0">
+                {/* User Identity Info */}
+                <div className="hidden sm:flex flex-col items-end pr-2 border-r border-emerald-800/50">
+                  <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest leading-none mb-0.5">
+                    {userRole === 'admin' ? 'Administrator' : 'Keluarga'}
+                  </span>
+                  <span className="text-[10px] font-medium text-white/60 truncate max-w-[120px]">
+                    {user?.email}
+                  </span>
+                </div>
+
+                {userRole === 'admin' && (
+                  <div className="flex items-center gap-1.5">
+                    <ExcelImport userId={user?.id || 'admin'} currentUserRole={userRole} isCompact={true} />
+                    <button
+                      onClick={() => { setEditingMember(null); setIsMemberModalOpen(true); }}
+                      className="flex items-center gap-1 bg-amber-500 hover:bg-amber-400 text-amber-950 px-2 py-1.5 rounded-lg text-[10px] font-black transition-all shadow-md active:scale-95 border border-amber-400/50 uppercase"
+                      title="Tambah Data Anggota"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span className="hidden xl:inline">Tambah Data</span>
+                    </button>
+                  </div>
+                )}
               </div>
               
-              {userRole === 'admin' && (
-                <button
-                  onClick={() => { setEditingMember(null); setIsMemberModalOpen(true); }}
-                  className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-amber-950 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-md active:scale-95 border border-amber-400/50"
+              <div className="flex items-center gap-2 pl-2 lg:border-l border-emerald-800/50">
+                <button 
+                  onClick={() => getSupabaseClient().auth.signOut()}
+                  className="p-2 text-emerald-300 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+                  title="Keluar"
                 >
-                  <Plus className="w-4 h-4" />
-                  <span className="hidden xl:inline">Tambah Anggota</span>
+                  <LogOut className="w-4 h-4 md:w-5 h-5" />
                 </button>
-              )}
-
-              <div className="h-8 w-px bg-emerald-700/50 mx-1 hidden md:block"></div>
-
-              <button
-                onClick={() => signOut(auth)}
-                className="p-2.5 text-emerald-200 hover:text-white hover:bg-red-500/20 rounded-xl transition-all group"
-                title="Keluar"
-              >
-                <LogOut className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </button>
+              </div>
             </div>
           </div>
-        </div>
-        
-        {/* Mobile Excel Import (Visible only on mobile/tablet) */}
-        <div className="lg:hidden bg-emerald-900/30 border-t border-emerald-700/30 px-4 py-2 flex justify-center">
-          <ExcelImport userId={user.uid} currentUserRole={userRole} />
-        </div>
-
-        {/* Hadith Banner (Desktop only, subtle) */}
-        <div className="hidden xl:block bg-emerald-900/40 py-1.5 border-t border-emerald-700/30">
-          <p className="text-[11px] text-center font-arabic text-emerald-200/80 italic tracking-wide" dir="rtl">
-            "مَنْ أَحَبَّ أَنْ يُبْسَطَ لَهُ فِي رِزْقِهِ، وَيُنْسَأَ لَهُ فِي أَثَرِهِ، فَلْيَصِلْ رَحِمَهُ"
-          </p>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="flex-1 relative overflow-hidden">
-        {isLoading ? (
+        {!isConfigured ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-white/50 backdrop-blur-md">
+            <div className="w-20 h-20 bg-amber-100 text-amber-600 rounded-3xl flex items-center justify-center mb-6 shadow-xl rotate-3">
+              <ShieldCheck className="w-10 h-10" />
+            </div>
+            <h2 className="text-3xl font-black text-gray-900 mb-4 tracking-tight">Konfigurasi Diperlukan</h2>
+            <p className="text-gray-500 max-w-md mb-8 leading-relaxed">
+              Selamat datang di Digital Nasab. Untuk memulai, silakan masukkan API Key Supabase Anda melalui menu pengaturan di pojok kanan atas.
+            </p>
+          </div>
+        ) : isLoading ? (
           <div className="absolute inset-0 flex items-center justify-center bg-emerald-50/50 backdrop-blur-sm z-20">
             <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
           </div>
@@ -427,7 +361,7 @@ export default function App() {
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Pohon Keluarga Kosong</h2>
             <p className="text-gray-500 max-w-md mb-8">
-              Mulai bangun silsilah keluarga Anda dengan menambahkan anggota pertama. Anda bisa menambahkan orang tua, anak, atau pasangan nantinya.
+              Mulai bangun silsilah keluarga Anda dengan menambahkan anggota pertama.
             </p>
             <button
               onClick={() => { setEditingMember(null); setIsMemberModalOpen(true); }}
@@ -438,29 +372,24 @@ export default function App() {
             </button>
           </div>
         ) : viewMode === 'tree' ? (
-          <TreeView 
-            members={members} 
-            onNodeClick={handleNodeClick} 
-            onEditClick={handleEditClick} 
-            currentUserRole={userRole}
-          />
+          <TreeView members={members} onNodeClick={handleNodeClick} onEditClick={handleEditClick} currentUserRole={userRole} />
         ) : viewMode === 'directory' ? (
-          <DirectoryView
-            members={members}
-            onEdit={handleEditClick}
-            onDelete={handleDeleteMember}
-            currentUserRole={userRole}
+          <DirectoryView 
+            members={members} 
+            onEdit={handleEditClick} 
+            onDelete={handleDeleteMember} 
+            onMemberClick={handleNodeClick}
+            currentUserRole={userRole} 
           />
         ) : viewMode === 'stats' ? (
           <StatsView members={members} />
-        ) : viewMode === 'users' ? (
-          <UserManagement currentUserRole={userRole} />
+        ) : viewMode === 'forum' ? (
+          <ForumView currentUser={user} isAdmin={userRole === 'admin'} />
         ) : (
-          <AISettings />
+          <UserManagement currentUserRole={userRole} />
         )}
       </main>
 
-      {/* Modals & Chatbot */}
       <MemberModal
         isOpen={isMemberModalOpen}
         onClose={() => { setIsMemberModalOpen(false); setEditingMember(null); }}
@@ -468,7 +397,6 @@ export default function App() {
         editingMember={editingMember}
         members={members}
       />
-
       <ProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
@@ -478,8 +406,14 @@ export default function App() {
         onDelete={handleDeleteMember}
         currentUserRole={userRole}
       />
-
-      <Chatbot members={members} />
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <SettingsProvider>
+      <AppContent />
+    </SettingsProvider>
   );
 }
