@@ -27,21 +27,11 @@ export interface FamilyMember {
   occupation?: string;
   education?: string;
   bio?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type NewFamilyMember = Omit<FamilyMember, 'id' | 'ownerId' | 'createdAt' | 'updatedAt'>;
-
-export type AIModel = 'glm-4' | 'glm-5' | 'seed-2.0-mini' | 'seed-1.8' | 'deepseek-3.2';
-
-export interface AIConfig {
-  apiKey: string;
-  baseUrl: string;
-  defaultModel: AIModel;
-  autoSwitch: boolean;
-  updatedAt: Date;
-}
 
 export type ForumCategory = 'Pengumuman' | 'Update Data' | 'Acara Keluarga' | 'Urunan & Iuran' | 'Obrolan Umum';
 
