@@ -327,6 +327,21 @@ function AppContent() {
         )}
       </main>
 
+      {/* Footer */}
+      <footer className="py-6 bg-white border-t border-gray-100 mt-auto">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
+          <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
+            &copy; 2026 b.o.a. Indonesia
+          </p>
+          <div className="flex items-center gap-6">
+            <span className="h-1 w-1 bg-gray-300 rounded-full hidden md:block"></span>
+            <p className="text-[10px] text-gray-300 italic font-light">
+              Digital Nasab - Silsilah Iman Diharjo
+            </p>
+          </div>
+        </div>
+      </footer>
+
       {/* Modals */}
       <MemberModal
         isOpen={isMemberModalOpen}
