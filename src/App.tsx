@@ -149,135 +149,95 @@ function AppContent() {
     setIsMemberModalOpen(true);
   };
 
+  const navItems = [
+    { id: 'tree', label: 'Silsilah', icon: LayoutGrid },
+    { id: 'directory', label: 'Direktori', icon: List },
+    { id: 'stats', label: 'Statistik', icon: BarChart2 },
+    { id: 'forum', label: 'Forum', icon: MessageSquare },
+    ...(userRole === 'admin' ? [{ id: 'users', label: 'Akses', icon: ShieldCheck }] : []),
+  ];
+
   if (!user) return <Auth />;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
+    <div className="min-h-screen bg-gray-50 flex flex-col font-sans mb-20 lg:mb-0">
       {!hasSeenWelcome && <IslamicWelcome onComplete={() => setHasSeenWelcome(true)} />}
 
-      {/* Header */}
+      {/* Header - Optimized for Mobile */}
       <header className="bg-emerald-900 text-white shadow-2xl z-20 sticky top-0 border-b border-emerald-800/50">
-        <div className="max-w-7xl mx-auto px-4 h-auto lg:h-20 py-3 lg:py-0">
-          <div className="flex flex-col lg:grid lg:grid-cols-3 items-center h-full gap-4 lg:gap-0">
+        <div className="max-w-7xl mx-auto px-4 h-16 lg:h-20 flex items-center justify-between">
             
-            {/* 1. BRAND AREA (LOGO) - LEFT */}
-            <div className="flex items-center gap-3 w-full lg:w-auto justify-center lg:justify-start">
-              <div className="bg-emerald-700 p-2 rounded-xl shadow-inner border border-emerald-600/50 transform -rotate-2 hover:rotate-0 transition-all duration-300 shrink-0">
-                <Users className="w-6 h-6 text-emerald-100" />
+            {/* BRAND AREA - LEFT */}
+            <div className="flex items-center gap-2 lg:gap-3">
+              <div className="bg-emerald-700 p-1.5 lg:p-2 rounded-lg lg:rounded-xl shadow-inner border border-emerald-600/50 transform -rotate-1 hover:rotate-0 transition-all duration-300 shrink-0">
+                <Users className="w-5 h-5 lg:w-6 lg:h-6 text-emerald-100" />
               </div>
-              <div className="text-right flex flex-col justify-center min-w-[120px]" dir="rtl">
-                <h1 className="text-2xl md:text-3xl font-normal tracking-tight leading-7 drop-shadow-sm font-arabic m-0">شجرة النسب الرقمية</h1>
-                <p className="text-[10px] md:text-xs text-emerald-400 font-medium tracking-normal opacity-90 font-arabic m-0 -mt-1">سلسلة إيـمـan ديـهـارجـو</p>
-              </div>
-            </div>
-
-            {/* 2. NAVIGATION CENTER */}
-            <div className="flex justify-center w-full">
-              <div className="flex items-center bg-emerald-950/40 backdrop-blur-md rounded-xl p-1 border border-emerald-700/30 shadow-inner max-sm:overflow-x-auto no-scrollbar">
-                <div className="flex items-center gap-0.5 min-w-max">
-                  <button
-                    onClick={() => setViewMode('tree')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${
-                      viewMode === 'tree' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
-                    }`}
-                  >
-                    <LayoutGrid className="w-3.5 h-3.5" />
-                    <span>Silsilah</span>
-                  </button>
-                  <button
-                    onClick={() => setViewMode('directory')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${
-                      viewMode === 'directory' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
-                    }`}
-                  >
-                    <List className="w-3.5 h-3.5" />
-                    <span>Direktori</span>
-                  </button>
-                  <button
-                    onClick={() => setViewMode('stats')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${
-                      viewMode === 'stats' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
-                    }`}
-                  >
-                    <BarChart2 className="w-3.5 h-3.5" />
-                    <span>Statistik</span>
-                  </button>
-                  <button
-                    onClick={() => setViewMode('forum')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${
-                      viewMode === 'forum' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
-                    }`}
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>Forum</span>
-                  </button>
-                  {userRole === 'admin' && (
-                    <button
-                      onClick={() => setViewMode('users')}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${
-                        viewMode === 'users' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
-                      }`}
-                    >
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>Akses</span>
-                    </button>
-                  )}
-                </div>
+              <div className="text-right flex flex-col justify-center min-w-[100px] lg:min-w-[120px]" dir="rtl">
+                <h1 className="text-xl lg:text-3xl font-normal tracking-tight leading-none drop-shadow-sm font-arabic m-0">شجرة النسب</h1>
+                <p className="text-[8px] lg:text-xs text-emerald-400 font-medium tracking-normal opacity-90 font-arabic m-0">سلسلة إيـمـan ديـهـargو</p>
               </div>
             </div>
 
-            {/* 3. ACTION AREA RIGHT */}
-            <div className="flex items-center gap-3 w-full lg:w-auto justify-center lg:justify-end">
-              <div className="flex items-center gap-3 shrink-0">
-                <div className="hidden sm:flex flex-col items-end pr-2 border-r border-emerald-800/50">
-                  <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest leading-none mb-0.5">
-                    {userRole === 'admin' ? 'Administrator' : 'Keluarga'}
-                  </span>
-                  <span className="text-[10px] font-medium text-white/60 truncate max-w-[120px]">
-                    {user?.email}
-                  </span>
-                </div>
+            {/* NAVIGATION CENTER - Hidden on Mobile */}
+            <div className="hidden lg:flex justify-center flex-1 mx-4">
+              <div className="flex items-center bg-emerald-950/40 backdrop-blur-md rounded-xl p-1 border border-emerald-700/30 shadow-inner">
+                {navItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setViewMode(item.id as any)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all duration-200 ${
+                      viewMode === item.id ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                    }`}
+                  >
+                    <item.icon className="w-3.5 h-3.5" />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
+            {/* ACTION AREA RIGHT */}
+            <div className="flex items-center gap-2 lg:gap-3 shrink-0">
+              <div className="flex items-center gap-2">
                 {userRole === 'admin' && (
-                  <div className="flex items-center gap-1.5">
+                  <>
                     <ExcelImport userId={user?.id || 'admin'} currentUserRole={userRole} isCompact={true} />
                     <button
                       onClick={() => { setEditingMember(null); setIsMemberModalOpen(true); }}
-                      className="flex items-center gap-1 bg-amber-500 hover:bg-amber-400 text-amber-950 px-2 py-1.5 rounded-lg text-[10px] font-black transition-all shadow-md active:scale-95 border border-amber-400/50 uppercase"
-                      title="Tambah Data Anggota"
+                      className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-amber-950 px-2 lg:px-3 py-1.5 rounded-lg text-[10px] font-black transition-all shadow-md active:scale-95 border border-amber-400/50"
+                      title="Tambah Data"
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span className="hidden xl:inline">Tambah Data</span>
+                      <Plus className="w-4 h-4" />
+                      <span className="hidden lg:inline uppercase">Tambah Data</span>
                     </button>
-                  </div>
+                  </>
                 )}
-              </div>
-              
-              <div className="flex items-center gap-2 pl-2 lg:border-l border-emerald-800/50">
-                <SettingsMenu currentUserRole={userRole} />
-                <button 
-                  onClick={() => getSupabaseClient().auth.signOut()}
-                  className="p-2 text-emerald-300 hover:text-white hover:bg-white/10 rounded-lg transition-all"
-                  title="Keluar"
-                >
-                  <LogOut className="w-4 h-4 md:w-5 h-5" />
-                </button>
+                
+                <div className="flex items-center gap-1.5 ml-1 lg:ml-2 pl-2 lg:pl-3 border-l border-emerald-800/50">
+                  <SettingsMenu currentUserRole={userRole} />
+                  <button 
+                    onClick={() => getSupabaseClient().auth.signOut()}
+                    className="p-2 text-emerald-300 hover:text-white hover:bg-white/10 rounded-lg transition-all"
+                    title="Keluar"
+                  >
+                    <LogOut className="w-4 h-4 lg:w-5 lg:h-5" />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 relative overflow-hidden">
+      <main className="flex-1 relative overflow-hidden pb-16 lg:pb-0">
         {!isConfigured ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-white/50 backdrop-blur-md">
-            <div className="w-20 h-20 bg-amber-100 text-amber-600 rounded-3xl flex items-center justify-center mb-6 shadow-xl rotate-3">
-              <ShieldCheck className="w-10 h-10" />
+            <div className="w-16 lg:w-20 h-16 lg:h-20 bg-amber-100 text-amber-600 rounded-2xl lg:rounded-3xl flex items-center justify-center mb-6 shadow-xl rotate-3">
+              <ShieldCheck className="w-8 h-8 lg:w-10 lg:h-10" />
             </div>
-            <h2 className="text-3xl font-black text-gray-900 mb-4 tracking-tight">Konfigurasi Diperlukan</h2>
-            <p className="text-gray-500 max-w-md mb-8 leading-relaxed">
-              Selamat datang di Digital Nasab. Untuk memulai, silakan masukkan API Key Supabase Anda melalui menu pengaturan di pojok kanan atas.
+            <h2 className="text-2xl lg:text-3xl font-black text-gray-900 mb-4 tracking-tight">Konfigurasi Diperlukan</h2>
+            <p className="text-gray-500 max-w-md mb-8 leading-relaxed text-sm">
+              Server belum terkonfigurasi dengan benar. Silakan hubungi Administrator.
             </p>
           </div>
         ) : isLoading ? (
@@ -286,17 +246,14 @@ function AppContent() {
           </div>
         ) : members.length === 0 ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6">
-            <div className="w-24 h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6 shadow-inner">
-              <Users className="w-12 h-12" />
+            <div className="w-20 lg:w-24 h-20 lg:h-24 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6 shadow-inner">
+              <Users className="w-10 lg:w-12 h-10 lg:h-12" />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Pohon Keluarga Kosong</h2>
-            <p className="text-gray-500 max-w-md mb-8 leading-relaxed">
-              Mulai bangun silsilah keluarga Anda dengan menambahkan anggota pertama atau mengimpor data melalui menu di atas.
-            </p>
+            <h2 className="text-xl lg:text-2xl font-bold text-gray-900 mb-2">Pohon Keluarga Kosong</h2>
             {userRole === 'admin' && (
               <button
                 onClick={() => { setEditingMember(null); setIsMemberModalOpen(true); }}
-                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-emerald-200"
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-xl font-bold transition-all shadow-lg"
               >
                 <Plus className="w-5 h-5" />
                 Tambah Anggota Pertama
@@ -304,20 +261,9 @@ function AppContent() {
             )}
           </div>
         ) : viewMode === 'tree' ? (
-          <TreeView 
-            members={members} 
-            onNodeClick={handleNodeClick} 
-            onEditClick={handleEditClick} 
-            currentUserRole={userRole} 
-          />
+          <TreeView items={members} onNodeClick={handleNodeClick} onEditClick={handleEditClick} currentUserRole={userRole} />
         ) : viewMode === 'directory' ? (
-          <DirectoryView 
-            members={members} 
-            onEdit={handleEditClick} 
-            onDelete={handleDeleteMember} 
-            onMemberClick={handleNodeClick}
-            currentUserRole={userRole} 
-          />
+          <DirectoryView members={members} onEdit={handleEditClick} onDelete={handleDeleteMember} onMemberClick={handleNodeClick} currentUserRole={userRole} />
         ) : viewMode === 'stats' ? (
           <StatsView members={members} />
         ) : viewMode === 'forum' ? (
@@ -327,14 +273,34 @@ function AppContent() {
         )}
       </main>
 
-      {/* Footer */}
-      <footer className="py-6 bg-white border-t border-gray-100 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
+      {/* Bottom Navigation - Only for Mobile */}
+      <nav className="fixed bottom-0 left-0 right-0 lg:hidden bg-emerald-900/95 backdrop-blur-lg border-t border-emerald-800/50 z-50 px-2 pb-safe-area-inset-bottom">
+        <div className="flex justify-around items-center h-16 max-w-md mx-auto">
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setViewMode(item.id as any)}
+              className={`flex flex-col items-center justify-center gap-1 w-full h-full transition-all duration-300 ${
+                viewMode === item.id ? 'text-white' : 'text-emerald-400 opacity-60'
+              }`}
+            >
+              <div className={`p-1.5 rounded-xl transition-all duration-300 ${viewMode === item.id ? 'bg-emerald-600 shadow-md scale-110' : ''}`}>
+                <item.icon className="w-5 h-5" />
+              </div>
+              <span className="text-[10px] font-bold tracking-tight">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {/* Footer - Desktop Only */}
+      <footer className="hidden lg:block py-6 bg-white border-t border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
           <p className="text-gray-400 text-xs font-medium tracking-wider uppercase">
             &copy; 2026 b.o.a. Indonesia
           </p>
           <div className="flex items-center gap-6">
-            <span className="h-1 w-1 bg-gray-300 rounded-full hidden md:block"></span>
+            <span className="h-1 w-1 bg-gray-300 rounded-full"></span>
             <p className="text-[10px] text-gray-300 italic font-light">
               Digital Nasab - Silsilah Iman Diharjo
             </p>
