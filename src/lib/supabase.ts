@@ -1,28 +1,21 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
+// Kredensial Supabase Permanen (Hardcoded)
+const SUPABASE_URL = 'https://rjuhotqjxvrmzmuiripf.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJqdWhvdHFqeHZybXptdWlyaXBmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MjEyMzUsImV4cCI6MjA5MDI5NzIzNX0.KXCyqhD_zjKw7vb33As1UvC7kYajy9o1yOZ-VKRnIH0';
+
 let supabaseInstance: SupabaseClient | null = null;
-let currentUrl: string | null = null;
 
 /**
  * Mendapatkan instance Supabase Client (Singleton).
- * Fungsi ini memastikan hanya ada satu GoTrueClient yang berjalan di browser,
- * dan secara otomatis melakukan re-init jika konfigurasi URL berubah.
+ * Sekarang menggunakan kredensial permanen yang sudah di-hardcode.
  */
 export const getSupabaseClient = () => {
-    const saved = localStorage.getItem('app_settings');
-    const settings = saved ? JSON.parse(saved) : null;
-
-    const url = settings?.supabaseUrl || import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
-    const anonKey = settings?.supabaseAnonKey || import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder';
-
-    // Jika instance sudah ada dan URL-nya sama, kembalikan instance yang sama
-    if (supabaseInstance && currentUrl === url) {
+    if (supabaseInstance) {
         return supabaseInstance;
     }
 
-    // Jika URL berubah (misal: user update API Key) atau belum ada instance, buat baru
-    currentUrl = url;
-    supabaseInstance = createClient(url, anonKey);
+    supabaseInstance = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     return supabaseInstance;
 };
 

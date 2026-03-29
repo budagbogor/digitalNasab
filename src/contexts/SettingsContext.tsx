@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
+/**
+ * Settings hanya menyimpan Password Update Keluarga untuk sinkronisasi data non-admin.
+ * Kredensial Supabase kini telah di-hardcode di lib/supabase.ts.
+ */
 interface Settings {
-  supabaseUrl: string;
-  supabaseAnonKey: string;
   familyEditPassword: string;
 }
 
@@ -13,8 +15,6 @@ interface SettingsContextType {
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  supabaseUrl: 'https://rjuhotqjxvrmzmuiripf.supabase.co',
-  supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJqdWhvdHFqeHZybXptdWlyaXBmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3MjEyMzUsImV4cCI6MjA5MDI5NzIzNX0.KXCyqhD_zjKw7vb33As1UvC7kYajy9o1yOZ-VKRnIH0',
   familyEditPassword: 'keluarga123',
 };
 
@@ -22,33 +22,27 @@ const SettingsContext = createContext<SettingsContextType | undefined>(undefined
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<Settings>(() => {
-    const saved = localStorage.getItem('app_settings');
+    const saved = localStorage.getItem('app_settings_v2'); // Gunakan namespace baru untuk pembersihan
     if (!saved) return DEFAULT_SETTINGS;
 
-    const parsedSaved = JSON.parse(saved);
-    
-    // Logika Migrasi Otomatis:
-    // Jika DEFAULT_SETTINGS memiliki URL baru dan berbeda dengan yang tersimpan,
-    // kita paksa gunakan yang baru agar sinkron dengan proyek Supabase terkini.
-    if (DEFAULT_SETTINGS.supabaseUrl && parsedSaved.supabaseUrl !== DEFAULT_SETTINGS.supabaseUrl) {
-      return { ...parsedSaved, ...DEFAULT_SETTINGS };
+    try {
+      const parsedSaved = JSON.parse(saved);
+      return { ...DEFAULT_SETTINGS, ...parsedSaved };
+    } catch (e) {
+      return DEFAULT_SETTINGS;
     }
-
-    return { ...DEFAULT_SETTINGS, ...parsedSaved };
   });
 
   useEffect(() => {
-    localStorage.setItem('app_settings', JSON.stringify(settings));
+    localStorage.setItem('app_settings_v2', JSON.stringify(settings));
   }, [settings]);
 
   const updateSettings = (newSettings: Partial<Settings>) => {
     setSettings(prev => ({ ...prev, ...newSettings }));
   };
 
-  const isConfigured = Boolean(
-    settings.supabaseUrl && 
-    settings.supabaseAnonKey
-  );
+  // Selalu true karena Supabase sudah di-hardcode
+  const isConfigured = true;
 
   return (
     <SettingsContext.Provider value={{ settings, updateSettings, isConfigured }}>
