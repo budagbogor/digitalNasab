@@ -266,6 +266,9 @@ export default function TreeView({ members, onNodeClick, onEditClick, currentUse
         fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
         minZoom={0.1}
         maxZoom={2}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={false}
         attributionPosition="bottom-right"
       >
         {/* Definisi Marker Kustom untuk Dot Pertemuan */}
