@@ -261,7 +261,7 @@ function AppContent() {
             )}
           </div>
         ) : viewMode === 'tree' ? (
-          <TreeView items={members} onNodeClick={handleNodeClick} onEditClick={handleEditClick} currentUserRole={userRole} />
+          <TreeView members={members} onNodeClick={handleNodeClick} onEditClick={handleEditClick} currentUserRole={userRole} />
         ) : viewMode === 'directory' ? (
           <DirectoryView members={members} onEdit={handleEditClick} onDelete={handleDeleteMember} onMemberClick={handleNodeClick} currentUserRole={userRole} />
         ) : viewMode === 'stats' ? (
