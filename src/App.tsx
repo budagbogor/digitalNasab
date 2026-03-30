@@ -1,4 +1,11 @@
 import { useState, useEffect } from 'react';
+import MaintenancePage from './components/MaintenancePage';
+
+// =============================================
+// 🔧 MAINTENANCE MODE – Ganti ke `false` untuk
+//    mengembalikan website ke mode normal
+// =============================================
+const MAINTENANCE_MODE = true;
 import { getSupabaseClient } from './lib/supabase';
 import { FamilyMember, NewFamilyMember, UserRole } from './types';
 import Auth from './components/Auth';
@@ -395,6 +402,9 @@ function AppContent() {
 }
 
 export default function App() {
+  if (MAINTENANCE_MODE) {
+    return <MaintenancePage />;
+  }
   return (
     <SettingsProvider>
       <AppContent />
