@@ -20,12 +20,12 @@ const nodeWidth = 280;
 const nodeHeight = 100;
 const spouseGap = 20; // Jarak sangat dekat antar pasangan
 
-const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => {
+const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'TB') => {
   const g = new dagre.graphlib.Graph();
   g.setGraph({ 
     rankdir: direction,
-    nodesep: 60, // Jarak antar baris/keluarga
-    ranksep: 250, // Jarak antar generasi
+    nodesep: 80, // Jarak antar individu/keluarga
+    ranksep: 150, // Jarak antar generasi dari atas ke bawah
     marginx: 50,
     marginy: 50,
   });
@@ -33,7 +33,7 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
 
   // 1. Identifikasi Pasangan
   const spouseMap = new Map<string, string>(); // Suami -> Istri
-  const isSpouse = new Set<string>(); // Daftar ID yang merupakan istri (untuk diabaikan di dagre)
+  const isSpouse = new Set<string>();
 
   edges.forEach(edge => {
     if (edge.id.startsWith('e-spouse-')) {
@@ -44,25 +44,23 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
     }
   });
 
-  // 2. Tambahkan Node ke Dagre (Gunakan Virtual Height untuk Pasangan)
+  // 2. Tambahkan Node ke Dagre (Gunakan Virtual Width untuk Pasangan sejajar horizontal)
   nodes.forEach((node) => {
     if (!isSpouse.has(node.id)) {
       const hasSpouse = spouseMap.has(node.id);
       g.setNode(node.id, { 
-        width: nodeWidth, 
-        // Jika punya pasangan, alokasikan tinggi untuk dua kotak + jarak kecil
-        height: hasSpouse ? (nodeHeight * 2 + spouseGap) : nodeHeight 
+        width: hasSpouse ? (nodeWidth * 2 + spouseGap) : nodeWidth,
+        height: nodeHeight 
       });
     }
   });
 
-  // 3. Tambahkan Edge ke Dagre (Alihkan jalur istri ke suami agar satu blok)
+  // 3. Alihkan jalur istri ke suami di Dagre agar dianggap satu keluarga yang utuh
   edges.forEach((edge) => {
     if (!edge.id.startsWith('e-spouse-')) {
       let source = edge.source;
       let target = edge.target;
 
-      // Cari siapa "kepala keluarga" di blok ini
       spouseMap.forEach((wifeId, husbandId) => {
         if (source === wifeId) source = husbandId;
         if (target === wifeId) target = husbandId;
@@ -76,7 +74,7 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
 
   dagre.layout(g);
 
-  // 4. Mapping Posisi Kembali
+  // 4. Mapping Posisi node secara horizontal
   const layoutedNodes = nodes.map((node) => {
     let x, y;
     
@@ -88,15 +86,15 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
 
     if (husbandId) {
       const hPos = g.node(husbandId);
-      x = hPos.x;
-      // Letakkan tepat di bawah suami
-      y = hPos.y + (nodeHeight / 2) + (spouseGap / 2) + (nodeHeight / 2);
+      y = hPos.y;
+      // Letakkan di sebelah KANAN suami
+      x = hPos.x + (nodeWidth / 2) + (spouseGap / 2) + (nodeWidth / 2);
     } else {
       const pos = g.node(node.id);
       if (spouseMap.has(node.id)) {
-        // Jika ini suami, geser sedikit ke atas dalam bloknya
-        x = pos.x;
-        y = pos.y - (nodeHeight / 2) - (spouseGap / 2);
+        // Jika ini suami, geser ke KIRI dalam virtual bloknya
+        y = pos.y;
+        x = pos.x - (nodeWidth / 2) - (spouseGap / 2);
       } else {
         x = pos.x;
         y = pos.y;
@@ -105,8 +103,8 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
 
     return {
       ...node,
-      targetPosition: Position.Left,
-      sourcePosition: Position.Right,
+      targetPosition: Position.Top,      // Garis ortu masuk dari atas
+      sourcePosition: Position.Bottom,   // Garis anak keluar ke bawah
       position: {
         x: x - nodeWidth / 2,
         y: y - nodeHeight / 2,
@@ -141,13 +139,13 @@ const CustomNode = ({ data }: { data: any }) => {
       className={`relative px-3 py-3 shadow-md rounded-xl border-2 ${bgColor} ${borderColor} w-[280px] hover:shadow-xl hover:scale-[1.02] transition-all cursor-pointer`}
       onClick={() => onInfoClick(member)}
     >
-      {/* Handles untuk Keturunan (Kiri - Kanan) */}
-      <Handle type="target" id="target" position={Position.Left} className="w-3 h-3 !bg-emerald-600 border-2 !border-white shadow-sm" />
-      <Handle type="source" id="source" position={Position.Right} className="w-3 h-3 !bg-emerald-600 border-2 !border-white shadow-sm" />
+      {/* Handles untuk Keturunan (Atas - Bawah) */}
+      <Handle type="target" id="target" position={Position.Top} className="w-3 h-3 !bg-emerald-600 border-2 !border-white shadow-sm" />
+      <Handle type="source" id="source" position={Position.Bottom} className="w-3 h-3 !bg-emerald-600 border-2 !border-white shadow-sm" />
       
-      {/* Handles untuk Pasangan (Atas - Bawah) - Digeser ke kanan agar tidak menumpuk di tengah */}
-      <Handle type="source" id="spouse-source" position={Position.Bottom} style={{ left: '75%' }} className="w-3 h-3 !bg-amber-500 border-2 !border-white shadow-sm" />
-      <Handle type="target" id="spouse-target" position={Position.Top} style={{ left: '75%' }} className="w-3 h-3 !bg-amber-500 border-2 !border-white shadow-sm" />
+      {/* Handles untuk Pasangan (Kiri - Kanan) */}
+      <Handle type="source" id="spouse-source" position={Position.Right} style={{ top: '50%' }} className="w-3 h-3 !bg-amber-500 border-2 !border-white shadow-sm" />
+      <Handle type="target" id="spouse-target" position={Position.Left} style={{ top: '50%' }} className="w-3 h-3 !bg-amber-500 border-2 !border-white shadow-sm" />
       
       <div className="flex items-center gap-3">
         {member.photoUrl ? (
@@ -247,7 +245,7 @@ export default function TreeView({ members, onNodeClick, onEditClick, currentUse
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
       initialNodes,
       initialEdges,
-      'LR' 
+      'TB' 
     );
 
     setNodes(layoutedNodes);
