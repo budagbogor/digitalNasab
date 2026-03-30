@@ -16,7 +16,7 @@ import ForumView from './components/ForumView';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import { 
   LogOut, Plus, Users, Loader2, LayoutGrid, List, 
-  BarChart2, ShieldCheck, MessageSquare 
+  BarChart2, ShieldCheck, MessageSquare, CheckCircle2, AlertCircle, X 
 } from 'lucide-react';
 
 function AppContent() {
@@ -30,6 +30,7 @@ function AppContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'tree' | 'directory' | 'users' | 'stats' | 'forum'>('tree');
   const [hasSeenWelcome, setHasSeenWelcome] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{ text: string; type: 'success' | 'error' | '' }>({ text: '', type: '' });
   
   const { isConfigured } = useSettings();
 
@@ -120,10 +121,12 @@ function AppContent() {
       }
       setIsMemberModalOpen(false);
       setEditingMember(null);
+      setSaveMessage({ text: `Berhasil ${editingMember ? 'memperbarui' : 'menambahkan'} data!`, type: 'success' });
+      setTimeout(() => setSaveMessage({ text: '', type: '' }), 4000);
     } catch (error: any) {
       console.error('Error saving member:', error);
       const errorMsg = error.message || error.details || 'Gagal menyimpan data.';
-      alert(`Terjadi Kesalahan: ${errorMsg}`);
+      setSaveMessage({ text: `Kesalahan: ${errorMsg}`, type: 'error' });
     }
   };
 
@@ -135,9 +138,11 @@ function AppContent() {
       if (error) throw error;
       setIsProfileModalOpen(false);
       setSelectedMember(null);
+      setSaveMessage({ text: 'Data anggota berhasil dihapus!', type: 'success' });
+      setTimeout(() => setSaveMessage({ text: '', type: '' }), 4000);
     } catch (error: any) {
       console.error('Error deleting member:', error);
-      alert(`Gagal Menghapus: ${error.message || 'Kesalahan sistem'}`);
+      setSaveMessage({ text: `Gagal Menghapus: ${error.message || 'Kesalahan'}`, type: 'error' });
     }
   };
 
@@ -364,6 +369,27 @@ function AppContent() {
       />
 
       <Chatbot />
+
+      {/* Global Toast Notification */}
+      {saveMessage.text && (
+        <div className={`fixed bottom-6 right-6 flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl z-[100] animate-in fade-in slide-in-from-bottom-4 duration-300 border ${
+          saveMessage.type === 'success' ? 'bg-emerald-600 text-white border-emerald-500' : 
+          saveMessage.type === 'error' ? 'bg-red-600 text-white border-red-500' : 'bg-gray-800 text-white border-gray-700'
+        }`}>
+          {saveMessage.type === 'success' && <CheckCircle2 className="w-6 h-6" />}
+          {saveMessage.type === 'error' && <AlertCircle className="w-6 h-6" />}
+          <div className="flex flex-col">
+            <span className="font-black text-xs uppercase tracking-widest opacity-70 leading-tight mb-0.5">Notifikasi</span>
+            <span className="font-bold text-sm tracking-tight">{saveMessage.text}</span>
+          </div>
+          <button 
+            onClick={() => setSaveMessage({ text: '', type: '' })}
+            className="ml-4 hover:bg-white/20 p-1.5 rounded-full transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
