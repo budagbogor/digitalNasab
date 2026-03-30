@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useEffect } from 'react';
+import { useCallback, useMemo, useEffect, useState } from 'react';
 import {
   ReactFlow,
   Controls,
@@ -18,97 +18,148 @@ import { User, Flower2, Edit2, Info } from 'lucide-react';
 
 const nodeWidth = 280;
 const nodeHeight = 100;
-const spouseGap = 20; // Jarak sangat dekat antar pasangan
+const spouseGap = 40; // Jarak antar pasangan agar lebih jelas
 
 const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'TB') => {
+  const isHorizontal = direction === 'LR';
   const g = new dagre.graphlib.Graph();
   g.setGraph({ 
     rankdir: direction,
-    nodesep: 80, // Jarak antar individu/keluarga
-    ranksep: 150, // Jarak antar generasi dari atas ke bawah
-    marginx: 50,
-    marginy: 50,
+    nodesep: 120, 
+    ranksep: 250, // Jarak antar generasi lebih lebar untuk kerapihan
+    marginx: 100,
+    marginy: 100,
   });
   g.setDefaultEdgeLabel(() => ({}));
 
-  // 1. Identifikasi Pasangan
-  const spouseMap = new Map<string, string>(); // Suami -> Istri
-  const isSpouse = new Set<string>();
-
+  // 1. Identifikasi Pasangan dan Hubungan
+  const spouseMap = new Map<string, string>(); // Node -> Pasangan
+  const parentMap = new Map<string, string>(); // Anak -> Parent
+  
   edges.forEach(edge => {
     if (edge.id.startsWith('e-spouse-')) {
-      if (!isSpouse.has(edge.source) && !isSpouse.has(edge.target)) {
-        spouseMap.set(edge.source, edge.target);
-        isSpouse.add(edge.target);
-      }
+      spouseMap.set(edge.source, edge.target);
+      spouseMap.set(edge.target, edge.source);
+    } else {
+      parentMap.set(edge.target, edge.source);
     }
   });
 
-  // 2. Tambahkan Node ke Dagre (Gunakan Virtual Width untuk Pasangan sejajar horizontal)
+  // 2. Hitung Level Generasi (BFS mulai dari Akar: Iman Diharjo)
+  const genLevels = new Map<string, number>();
+  const visited = new Set<string>();
+  const queue: { id: string, level: number }[] = [];
+
+  // Cari Akar Utama (Iman Diharjo)
+  const rootNode = nodes.find(node => {
+    const name = (node.data.member as FamilyMember).fullName.toLowerCase();
+    return name.includes('iman diharjo');
+  });
+
+  // Ambil semua kandidat akar (tidak punya orang tua)
+  const rootCandidates = nodes.filter(node => {
+    const member = node.data.member as FamilyMember;
+    return !member.parentId && !member.motherId;
+  });
+
+  // Mulai BFS dari Iman Diharjo (jika ada) atau kandidat pertama
+  const startNode = rootNode || rootCandidates[0];
+  if (startNode) {
+    queue.push({ id: startNode.id, level: 1 });
+    genLevels.set(startNode.id, 1);
+    visited.add(startNode.id);
+  }
+
+  // Tambahkan root candidates lain ke queue (jika ada silsilah terpisah)
+  rootCandidates.forEach(node => {
+    if (!visited.has(node.id)) {
+      queue.push({ id: node.id, level: 1 });
+      genLevels.set(node.id, 1);
+      visited.add(node.id);
+    }
+  });
+
+  // Proses BFS Generasi
+  let head = 0;
+  while (head < queue.length) {
+    const { id, level } = queue[head++];
+    
+    // 2.1 Sinkronisasi Pasangan (Setiap anggota di level L, pasangannya juga di level L)
+    const spouseId = spouseMap.get(id);
+    if (spouseId && !genLevels.has(spouseId)) {
+      genLevels.set(spouseId, level);
+      visited.add(spouseId);
+      // Tidak dimasukkan ke queue karena silsilah patrilineal (fokus nasab laki-laki)
+    }
+
+    // 2.2 Cari Anak (Jalur Nasab -> Level L + 1)
+    edges.forEach(edge => {
+      // Pastikan edge ini adalah jalur keturunan (bukan spouse edge)
+      if (!edge.id.startsWith('e-spouse-') && edge.source === id) {
+        if (!visited.has(edge.target)) {
+          genLevels.set(edge.target, level + 1);
+          visited.add(edge.target);
+          queue.push({ id: edge.target, level: level + 1 });
+        }
+      }
+    });
+  }
+
+  // 2.3 Tangani node yang tersisa (jika ada data terputus)
+  nodes.forEach(node => {
+    if (!genLevels.has(node.id)) {
+      genLevels.set(node.id, 1);
+    }
+  });
+
+  // 3. Tambahkan Node ke Dagre
   nodes.forEach((node) => {
-    if (!isSpouse.has(node.id)) {
-      const hasSpouse = spouseMap.has(node.id);
-      g.setNode(node.id, { 
-        width: hasSpouse ? (nodeWidth * 2 + spouseGap) : nodeWidth,
-        height: nodeHeight 
-      });
-    }
+    g.setNode(node.id, { 
+      width: nodeWidth, 
+      height: nodeHeight 
+    });
   });
 
-  // 3. Alihkan jalur istri ke suami di Dagre agar dianggap satu keluarga yang utuh
+  // 4. Tambahkan Edge ke Dagre
   edges.forEach((edge) => {
-    if (!edge.id.startsWith('e-spouse-')) {
-      let source = edge.source;
-      let target = edge.target;
-
-      spouseMap.forEach((wifeId, husbandId) => {
-        if (source === wifeId) source = husbandId;
-        if (target === wifeId) target = husbandId;
+    if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
+      const isSpouseEdge = edge.id.startsWith('e-spouse-');
+      g.setEdge(edge.source, edge.target, {
+        weight: isSpouseEdge ? 100 : 1, // Prioritas tinggi agar pasangan tetap sedekat mungkin
       });
-
-      if (g.hasNode(source) && g.hasNode(target)) {
-        g.setEdge(source, target);
-      }
     }
   });
 
   dagre.layout(g);
 
-  // 4. Mapping Posisi node secara horizontal
+  // 5. Mapping Posisi (FORCE ALIGNMENT PER GENERASI)
+  const GEN_DISTANCE = 600; // Tingkatkan jarak agar tidak menumpuk
+  
   const layoutedNodes = nodes.map((node) => {
-    let x, y;
-    
-    // Cek apakah ini istri yang mengikuti suami
-    let husbandId: string | undefined;
-    spouseMap.forEach((wifeId, hId) => {
-      if (node.id === wifeId) husbandId = hId;
-    });
+    const pos = g.node(node.id);
+    const level = genLevels.get(node.id) || 1;
+    const targetPos = isHorizontal ? Position.Left : Position.Top;
+    const sourcePos = isHorizontal ? Position.Right : Position.Bottom;
 
-    if (husbandId) {
-      const hPos = g.node(husbandId);
-      y = hPos.y;
-      // Letakkan di sebelah KANAN suami
-      x = hPos.x + (nodeWidth / 2) + (spouseGap / 2) + (nodeWidth / 2);
+    // Koordinat sumbu utama dipaksa berdasarkan level
+    let x, y;
+    if (isHorizontal) {
+      x = (level - 1) * GEN_DISTANCE;
+      y = pos.y * 1.5; // Beri skala tambahan pada sumbu sekunder agar tidak dempet vertikal
     } else {
-      const pos = g.node(node.id);
-      if (spouseMap.has(node.id)) {
-        // Jika ini suami, geser ke KIRI dalam virtual bloknya
-        y = pos.y;
-        x = pos.x - (nodeWidth / 2) - (spouseGap / 2);
-      } else {
-        x = pos.x;
-        y = pos.y;
-      }
+      x = pos.x * 1.5; // Beri skala tambahan pada sumbu sekunder agar tidak dempet horizontal
+      y = (level - 1) * GEN_DISTANCE;
     }
 
     return {
       ...node,
-      targetPosition: Position.Top,      // Garis ortu masuk dari atas
-      sourcePosition: Position.Bottom,   // Garis anak keluar ke bawah
+      targetPosition: targetPos,
+      sourcePosition: sourcePos,
       position: {
         x: x - nodeWidth / 2,
         y: y - nodeHeight / 2,
       },
+      data: { ...node.data, level }
     };
   });
 
@@ -123,7 +174,8 @@ interface TreeViewProps {
 }
 
 const CustomNode = ({ data }: { data: any }) => {
-  const { member, onEditClick, onInfoClick, currentUserRole } = data;
+  const { member, onEditClick, onInfoClick, currentUserRole, layoutDirection } = data;
+  const isHorizontal = layoutDirection === 'LR';
   const isMale = member.gender === 'male';
   const isDeceased = !member.isAlive;
   const isAdmin = currentUserRole === 'admin';
@@ -139,13 +191,33 @@ const CustomNode = ({ data }: { data: any }) => {
       className={`relative px-3 py-3 shadow-md rounded-xl border-2 ${bgColor} ${borderColor} w-[280px] hover:shadow-xl hover:scale-[1.02] transition-all cursor-pointer`}
       onClick={() => onInfoClick(member)}
     >
-      {/* Handles untuk Keturunan (Atas - Bawah) */}
-      <Handle type="target" id="target" position={Position.Top} className="w-3 h-3 !bg-emerald-600 border-2 !border-white shadow-sm" />
-      <Handle type="source" id="source" position={Position.Bottom} className="w-3 h-3 !bg-emerald-600 border-2 !border-white shadow-sm" />
+      {/* Handles untuk Keturunan (Dinamis: LR atau TB) */}
+      <Handle 
+        type="target" 
+        id="target" 
+        position={isHorizontal ? Position.Left : Position.Top} 
+        className="w-3 h-3 !bg-emerald-600 border-2 !border-white shadow-sm" 
+      />
+      <Handle 
+        type="source" 
+        id="source" 
+        position={isHorizontal ? Position.Right : Position.Bottom} 
+        className="w-3 h-3 !bg-emerald-600 border-2 !border-white shadow-sm" 
+      />
       
-      {/* Handles untuk Pasangan (Kiri - Kanan) */}
-      <Handle type="source" id="spouse-source" position={Position.Right} style={{ top: '50%' }} className="w-3 h-3 !bg-amber-500 border-2 !border-white shadow-sm" />
-      <Handle type="target" id="spouse-target" position={Position.Left} style={{ top: '50%' }} className="w-3 h-3 !bg-amber-500 border-2 !border-white shadow-sm" />
+      {/* Handles untuk Pasangan (Dinamis agar tidak tabrakan dengan garis nasab) */}
+      <Handle 
+        type="source" 
+        id="spouse-source" 
+        position={isHorizontal ? Position.Bottom : Position.Right} 
+        className="w-3 h-3 !bg-amber-500 border-2 !border-white shadow-sm" 
+      />
+      <Handle 
+        type="target" 
+        id="spouse-target" 
+        position={isHorizontal ? Position.Top : Position.Left} 
+        className="w-3 h-3 !bg-amber-500 border-2 !border-white shadow-sm" 
+      />
       
       <div className="flex items-center gap-3">
         {member.photoUrl ? (
@@ -193,12 +265,19 @@ const nodeTypes = {
 export default function TreeView({ members, onNodeClick, onEditClick, currentUserRole }: TreeViewProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [layoutDirection, setLayoutDirection] = useState<'TB' | 'LR'>('LR'); // Default Horizontal (LR)
 
   useEffect(() => {
     const initialNodes: Node[] = members.map((member) => ({
       id: member.id,
       type: 'custom',
-      data: { member, onEditClick, onInfoClick: onNodeClick, currentUserRole },
+      data: { 
+        member, 
+        onEditClick, 
+        onInfoClick: onNodeClick, 
+        currentUserRole,
+        layoutDirection // Kirim mode layout ke node
+      },
       position: { x: 0, y: 0 },
     }));
 
@@ -231,7 +310,7 @@ export default function TreeView({ members, onNodeClick, onEditClick, currentUse
             target: member.spouseId,
             sourceHandle: 'spouse-source',
             targetHandle: 'spouse-target',
-            type: 'smoothstep', // Menggunakan smoothstep agar melengkung rapi
+            type: 'smoothstep', 
             // Garis Pasangan: Kuning/Emas putus-putus
             style: { stroke: '#f59e0b', strokeWidth: 3, strokeDasharray: '8,5' }, 
             label: '❤️',
@@ -245,15 +324,47 @@ export default function TreeView({ members, onNodeClick, onEditClick, currentUse
     const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
       initialNodes,
       initialEdges,
-      'TB' 
+      layoutDirection 
     );
 
     setNodes(layoutedNodes);
     setEdges(layoutedEdges);
-  }, [members, onNodeClick, onEditClick, setNodes, setEdges]);
+  }, [members, onNodeClick, onEditClick, layoutDirection, setNodes, setEdges]);
 
   return (
-    <div className="absolute inset-0 bg-emerald-50/30">
+    <div className="absolute inset-0 bg-emerald-50/30 overflow-hidden">
+      {/* Mode Switcher */}
+      <div className="absolute top-4 right-4 z-50 flex items-center gap-1 bg-white/90 backdrop-blur-sm p-1.5 rounded-2xl shadow-xl border border-emerald-100">
+        <button
+          onClick={() => setLayoutDirection('LR')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            layoutDirection === 'LR' 
+              ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200 scale-105' 
+              : 'text-gray-500 hover:bg-emerald-50'
+          }`}
+        >
+          <div className="w-4 h-3 flex flex-col gap-0.5 border border-current rounded-sm p-px">
+            <div className="w-full h-px bg-current"></div>
+            <div className="w-full h-px bg-current"></div>
+          </div>
+          HORIZONTAL
+        </button>
+        <button
+          onClick={() => setLayoutDirection('TB')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            layoutDirection === 'TB' 
+              ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200 scale-105' 
+              : 'text-gray-500 hover:bg-emerald-50'
+          }`}
+        >
+          <div className="w-3 h-4 flex gap-0.5 border border-current rounded-sm p-px">
+            <div className="h-full w-px bg-current"></div>
+            <div className="h-full w-px bg-current"></div>
+          </div>
+          VERTIKAL
+        </button>
+      </div>
+
       <ReactFlow
         nodes={nodes}
         edges={edges}
