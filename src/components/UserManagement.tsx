@@ -68,17 +68,16 @@ export default function UserManagement({ currentUserRole }: { currentUserRole: U
       if (data.user) {
         const isDefaultAdmin = adminEmails.includes(newEmail.toLowerCase()) || newRole === 'admin';
         
-        // 2. Masukkan ke tabel users kita agar langsung muncul di list
-        const { error: insertError } = await client.from('users').insert({
+        // 2. Masukkan ke tabel users kita agar langsung muncul di list (Gunakan upsert agar tidak bentrok dengan trigger)
+        const { error: upsertError } = await client.from('users').upsert({
           uid: data.user.id,
           email: newEmail.toLowerCase(),
           displayName: newEmail.split('@')[0],
           role: isDefaultAdmin ? 'admin' : 'viewer',
-          createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-        });
+        }, { onConflict: 'uid' });
 
-        if (insertError) throw insertError;
+        if (upsertError) throw upsertError;
 
         alert('Pengguna berhasil dibuat! Email konfirmasi (jika aktif) telah dikirim.');
         setShowAddForm(false);

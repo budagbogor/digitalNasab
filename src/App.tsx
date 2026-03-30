@@ -120,9 +120,10 @@ function AppContent() {
       }
       setIsMemberModalOpen(false);
       setEditingMember(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving member:', error);
-      alert('Gagal menyimpan data.');
+      const errorMsg = error.message || error.details || 'Gagal menyimpan data.';
+      alert(`Terjadi Kesalahan: ${errorMsg}`);
     }
   };
 
@@ -134,8 +135,9 @@ function AppContent() {
       if (error) throw error;
       setIsProfileModalOpen(false);
       setSelectedMember(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting member:', error);
+      alert(`Gagal Menghapus: ${error.message || 'Kesalahan sistem'}`);
     }
   };
 
