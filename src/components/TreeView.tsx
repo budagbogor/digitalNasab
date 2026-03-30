@@ -20,151 +20,120 @@ const nodeWidth = 280;
 const nodeHeight = 100;
 const spouseGap = 40; // Jarak antar pasangan agar lebih jelas
 
-const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'TB') => {
+const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => {
   const isHorizontal = direction === 'LR';
-  const g = new dagre.graphlib.Graph();
-  g.setGraph({ 
-    rankdir: direction,
-    nodesep: 120, 
-    ranksep: 250, // Jarak antar generasi lebih lebar untuk kerapihan
-    marginx: 100,
-    marginy: 100,
-  });
-  g.setDefaultEdgeLabel(() => ({}));
+  const GEN_STEP = 420;   // Jarak antar generasi (sumbu utama)
+  const NODE_GAP = 160;   // Jarak antar node dalam satu generasi (sumbu sekunder)
 
-  // 1. Identifikasi Pasangan dan Hubungan
-  const spouseMap = new Map<string, string>(); // Node -> Pasangan
-  const parentMap = new Map<string, string>(); // Anak -> Parent
-  
+  // 1. BFS untuk hitung level generasi
+  const spouseMap = new Map<string, string>();
   edges.forEach(edge => {
     if (edge.id.startsWith('e-spouse-')) {
       spouseMap.set(edge.source, edge.target);
       spouseMap.set(edge.target, edge.source);
-    } else {
-      parentMap.set(edge.target, edge.source);
     }
   });
 
-  // 2. Hitung Level Generasi (BFS mulai dari Akar: Iman Diharjo)
   const genLevels = new Map<string, number>();
   const visited = new Set<string>();
-  const queue: { id: string, level: number }[] = [];
+  const queue: { id: string; level: number }[] = [];
 
-  // Cari Akar Utama (Iman Diharjo)
-  const rootNode = nodes.find(node => {
-    const name = (node.data.member as FamilyMember).fullName.toLowerCase();
-    return name.includes('iman diharjo');
-  });
+  // Cari akar: Iman Diharjo, lalu node yang tidak punya parentId DAN tidak punya pasangan
+  // (pasangan/menantu tanpa parentId akan mendapat level dari pasangannya saat BFS)
+  const rootNode =
+    nodes.find(n => (n.data.member as FamilyMember).fullName.toLowerCase().includes('iman diharjo')) ||
+    nodes.find(n => { const m = n.data.member as FamilyMember; return !m.parentId && !m.motherId; });
 
-  // Ambil semua kandidat akar (tidak punya orang tua)
-  const rootCandidates = nodes.filter(node => {
-    const member = node.data.member as FamilyMember;
-    return !member.parentId && !member.motherId;
-  });
+  if (rootNode) { queue.push({ id: rootNode.id, level: 1 }); genLevels.set(rootNode.id, 1); visited.add(rootNode.id); }
 
-  // Mulai BFS dari Iman Diharjo (jika ada) atau kandidat pertama
-  const startNode = rootNode || rootCandidates[0];
-  if (startNode) {
-    queue.push({ id: startNode.id, level: 1 });
-    genLevels.set(startNode.id, 1);
-    visited.add(startNode.id);
-  }
-
-  // Tambahkan root candidates lain ke queue (jika ada silsilah terpisah)
-  rootCandidates.forEach(node => {
-    if (!visited.has(node.id)) {
-      queue.push({ id: node.id, level: 1 });
-      genLevels.set(node.id, 1);
-      visited.add(node.id);
+  // Tambahkan ke antrian: hanya node yang tidak punya parentId DAN tidak punya pasangan
+  // (node yang punya pasangan akan mendapat levelnya dari pasangan saat BFS berjalan)
+  nodes.forEach(n => {
+    const m = n.data.member as FamilyMember;
+    if (!m.parentId && !m.motherId && !m.spouseId && !visited.has(n.id)) {
+      queue.push({ id: n.id, level: 1 }); genLevels.set(n.id, 1); visited.add(n.id);
     }
   });
 
-  // Proses BFS Generasi
   let head = 0;
   while (head < queue.length) {
     const { id, level } = queue[head++];
-    
-    // 2.1 Sinkronisasi Pasangan (Setiap anggota di level L, pasangannya juga di level L)
     const spouseId = spouseMap.get(id);
+    // Pasangan → level yang sama (baru diset jika belum ada levelnya)
     if (spouseId && !genLevels.has(spouseId)) {
-      genLevels.set(spouseId, level);
-      visited.add(spouseId);
-      // Tidak dimasukkan ke queue karena silsilah patrilineal (fokus nasab laki-laki)
+      genLevels.set(spouseId, level); visited.add(spouseId);
     }
-
-    // 2.2 Cari Anak (Jalur Nasab -> Level L + 1)
+    // Anak → level + 1 (hanya jalur nasab, bukan spouse)
     edges.forEach(edge => {
-      // Pastikan edge ini adalah jalur keturunan (bukan spouse edge)
-      if (!edge.id.startsWith('e-spouse-') && edge.source === id) {
-        if (!visited.has(edge.target)) {
-          genLevels.set(edge.target, level + 1);
-          visited.add(edge.target);
-          queue.push({ id: edge.target, level: level + 1 });
-        }
+      if (!edge.id.startsWith('e-spouse-') && edge.source === id && !visited.has(edge.target)) {
+        genLevels.set(edge.target, level + 1); visited.add(edge.target); queue.push({ id: edge.target, level: level + 1 });
       }
     });
   }
 
-  // 2.3 Tangani node yang tersisa (jika ada data terputus)
-  nodes.forEach(node => {
-    if (!genLevels.has(node.id)) {
-      genLevels.set(node.id, 1);
+  // Node yang tidak terjangkau BFS → cari lewat pasangannya, atau default ke level 1
+  nodes.forEach(n => {
+    if (!genLevels.has(n.id)) {
+      const m = n.data.member as FamilyMember;
+      const spouseLevel = m.spouseId ? genLevels.get(m.spouseId) : undefined;
+      genLevels.set(n.id, spouseLevel ?? 1);
     }
   });
 
-  // 3. Tambahkan Node ke Dagre
-  nodes.forEach((node) => {
-    g.setNode(node.id, { 
-      width: nodeWidth, 
-      height: nodeHeight 
+  // 2. Kelompokkan node per level, pertahankan urutan berdasarkan parentId + spouseId
+  //    agar pasangan selalu berdampingan
+  const levelGroups = new Map<number, Node[]>();
+  nodes.forEach(node => {
+    const lvl = genLevels.get(node.id) || 1;
+    if (!levelGroups.has(lvl)) levelGroups.set(lvl, []);
+    levelGroups.get(lvl)!.push(node);
+  });
+
+  // Hitung posisi sekunder (indeks) setiap node dalam levelnya
+  const secPositions = new Map<string, number>();
+  levelGroups.forEach((group, _lvl) => {
+    // Sortir: pasangan didekatkan dengan node pasangannya
+    const sorted: Node[] = [];
+    const placed = new Set<string>();
+    group.forEach(node => {
+      if (placed.has(node.id)) return;
+      sorted.push(node);
+      placed.add(node.id);
+      const spouseId = spouseMap.get(node.id);
+      if (spouseId) {
+        const spouse = group.find(n => n.id === spouseId);
+        if (spouse && !placed.has(spouseId)) { sorted.push(spouse); placed.add(spouseId); }
+      }
+    });
+    // Tengahkan grup
+    const total = sorted.length;
+    const startOffset = -((total - 1) * (nodeWidth + NODE_GAP)) / 2;
+    sorted.forEach((node, i) => {
+      secPositions.set(node.id, startOffset + i * (nodeWidth + NODE_GAP));
     });
   });
 
-  // 4. Tambahkan Edge ke Dagre
-  edges.forEach((edge) => {
-    if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
-      const isSpouseEdge = edge.id.startsWith('e-spouse-');
-      g.setEdge(edge.source, edge.target, {
-        weight: isSpouseEdge ? 100 : 1, // Prioritas tinggi agar pasangan tetap sedekat mungkin
-      });
-    }
-  });
-
-  dagre.layout(g);
-
-  // 5. Mapping Posisi (FORCE ALIGNMENT PER GENERASI)
-  const GEN_DISTANCE = 600; // Tingkatkan jarak agar tidak menumpuk
-  
-  const layoutedNodes = nodes.map((node) => {
-    const pos = g.node(node.id);
+  // 3. Matriks posisi akhir
+  const layoutedNodes = nodes.map(node => {
     const level = genLevels.get(node.id) || 1;
-    const targetPos = isHorizontal ? Position.Left : Position.Top;
-    const sourcePos = isHorizontal ? Position.Right : Position.Bottom;
-
-    // Koordinat sumbu utama dipaksa berdasarkan level
-    let x, y;
-    if (isHorizontal) {
-      x = (level - 1) * GEN_DISTANCE;
-      y = pos.y * 1.5; // Beri skala tambahan pada sumbu sekunder agar tidak dempet vertikal
-    } else {
-      x = pos.x * 1.5; // Beri skala tambahan pada sumbu sekunder agar tidak dempet horizontal
-      y = (level - 1) * GEN_DISTANCE;
-    }
+    const mainAxis = (level - 1) * GEN_STEP;
+    const secAxis = secPositions.get(node.id) || 0;
 
     return {
       ...node,
-      targetPosition: targetPos,
-      sourcePosition: sourcePos,
+      targetPosition: isHorizontal ? Position.Left : Position.Top,
+      sourcePosition: isHorizontal ? Position.Right : Position.Bottom,
       position: {
-        x: x - nodeWidth / 2,
-        y: y - nodeHeight / 2,
+        x: (isHorizontal ? mainAxis : secAxis) - nodeWidth / 2,
+        y: (isHorizontal ? secAxis : mainAxis) - nodeHeight / 2,
       },
-      data: { ...node.data, level }
+      data: { ...node.data, level },
     };
   });
 
   return { nodes: layoutedNodes, edges };
 };
+
 
 interface TreeViewProps {
   members: FamilyMember[];
@@ -268,7 +237,31 @@ export default function TreeView({ members, onNodeClick, onEditClick, currentUse
   const [layoutDirection, setLayoutDirection] = useState<'TB' | 'LR'>('LR'); // Default Horizontal (LR)
 
   useEffect(() => {
-    const initialNodes: Node[] = members.map((member) => ({
+    // === FILTER: Tampilkan node hanya jika memiliki minimal 1 koneksi ===
+    // Buat set ID anggota yang "terhubung" dalam silsilah
+    const connectedIds = new Set<string>();
+
+    // 1. Anggota yang memiliki parentId atau spouseId (terhubung ke atas/ke samping)
+    members.forEach(m => {
+      if (m.parentId) {
+        connectedIds.add(m.id);        // anak → terhubung
+        connectedIds.add(m.parentId);  // orang tua → terhubung
+      }
+      if (m.spouseId) {
+        connectedIds.add(m.id);        // diri sendiri → terhubung
+        connectedIds.add(m.spouseId);  // pasangan → terhubung
+      }
+    });
+
+    // 2. Selalu sertakan Iman Diharjo sebagai akar utama
+    const rootMember = members.find(m => m.fullName.toLowerCase().includes('iman diharjo'));
+    if (rootMember) connectedIds.add(rootMember.id);
+
+    // Saring members: hanya yang terhubung
+    const connectedMembers = members.filter(m => connectedIds.has(m.id));
+
+    // === Bangun Nodes & Edges dari connectedMembers ===
+    const initialNodes: Node[] = connectedMembers.map((member) => ({
       id: member.id,
       type: 'custom',
       data: { 
@@ -276,15 +269,15 @@ export default function TreeView({ members, onNodeClick, onEditClick, currentUse
         onEditClick, 
         onInfoClick: onNodeClick, 
         currentUserRole,
-        layoutDirection // Kirim mode layout ke node
+        layoutDirection
       },
       position: { x: 0, y: 0 },
     }));
 
     const initialEdges: Edge[] = [];
     
-    members.forEach((member) => {
-      if (member.parentId) {
+    connectedMembers.forEach((member) => {
+      if (member.parentId && connectedIds.has(member.parentId)) {
         initialEdges.push({
           id: `e-${member.parentId}-${member.id}`,
           source: member.parentId,
@@ -293,14 +286,12 @@ export default function TreeView({ members, onNodeClick, onEditClick, currentUse
           targetHandle: 'target',
           type: 'smoothstep',
           animated: true,
-          // Garis Ayah ke Anak: Hijau, tebal
           style: { stroke: '#059669', strokeWidth: 3 }, 
           markerEnd: { type: MarkerType.ArrowClosed, color: '#059669', width: 15, height: 15 },
-          // Menambahkan Dot Pertemuan di pangkal garis (Source)
           markerStart: 'junction-dot',
         });
       }
-      if (member.spouseId) {
+      if (member.spouseId && connectedIds.has(member.spouseId)) {
         const edgeId1 = `e-spouse-${member.id}-${member.spouseId}`;
         const edgeId2 = `e-spouse-${member.spouseId}-${member.id}`;
         if (!initialEdges.some(e => e.id === edgeId1 || e.id === edgeId2)) {
@@ -311,7 +302,6 @@ export default function TreeView({ members, onNodeClick, onEditClick, currentUse
             sourceHandle: 'spouse-source',
             targetHandle: 'spouse-target',
             type: 'smoothstep', 
-            // Garis Pasangan: Kuning/Emas putus-putus
             style: { stroke: '#f59e0b', strokeWidth: 3, strokeDasharray: '8,5' }, 
             label: '❤️',
             labelStyle: { fill: '#b45309', fontWeight: 800, fontSize: 12 },
