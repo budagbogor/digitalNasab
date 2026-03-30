@@ -1,24 +1,8 @@
 import { useState, useRef } from 'react';
 import { getSupabaseClient } from '../lib/supabase';
-import { Download, Upload, AlertCircle, CheckCircle2, X } from 'lucide-react';
+import { Download, Upload, AlertCircle, CheckCircle2, X, Database } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { UserRole } from '../types';
-
-interface ExcelRow {
-  'Nama Lengkap': string;
-  'Jenis Kelamin': 'L' | 'P';
-  'Status': 'Hidup' | 'Wafat';
-  'Tanggal Lahir'?: string;
-  'Tanggal Wafat'?: string;
-  'Telepon'?: string;
-  'Alamat'?: string;
-  'Pekerjaan'?: string;
-  'Pendidikan'?: string;
-  'Bio'?: string;
-  'Nama Ayah'?: string;
-  'Nama Ibu'?: string;
-  'Nama Pasangan'?: string;
-}
 
 export default function ExcelImport({ userId, currentUserRole, isCompact = false }: { userId: string, currentUserRole: UserRole, isCompact?: boolean }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -27,7 +11,6 @@ export default function ExcelImport({ userId, currentUserRole, isCompact = false
   const isAdmin = currentUserRole === 'admin';
 
   const downloadTemplate = () => {
-    // ... (logic sama, tidak berubah)
     const templateData = [
       {
         'Nama Lengkap': 'BUDI SANTOSO',
@@ -52,15 +35,64 @@ export default function ExcelImport({ userId, currentUserRole, isCompact = false
     XLSX.writeFile(workbook, "Template_Silsilah_Keluarga.xlsx");
   };
 
+  const exportDatabase = async () => {
+    setIsLoading(true);
+    setMessage({ text: 'Menyiapkan data ekspor...', type: '' });
+    
+    try {
+      const client = getSupabaseClient();
+      const { data, error } = await client
+        .from('family_members')
+        .select('*');
+
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        throw new Error('Tidak ada data untuk diekspor.');
+      }
+
+      // Map IDs to Names for human-readable relations
+      const idToNameMap = new Map<string, string>();
+      data.forEach(m => idToNameMap.set(m.id, m.fullName));
+
+      const exportData = data.map(m => ({
+        'ID': m.id,
+        'Nama Lengkap': m.fullName,
+        'Jenis Kelamin': m.gender === 'female' ? 'P' : 'L',
+        'Status': m.isAlive ? 'Hidup' : 'Wafat',
+        'Tanggal Lahir': m.birthDate || '-',
+        'Tanggal Wafat': m.deathDate || '-',
+        'Telepon': m.phone || '-',
+        'Alamat': m.address || '-',
+        'Pekerjaan': m.occupation || '-',
+        'Pendidikan': m.education || '-',
+        'Bio': m.bio || '-',
+        'Nama Ayah': m.parentId ? idToNameMap.get(m.parentId) || '' : '',
+        'Nama Ibu': m.motherId ? idToNameMap.get(m.motherId) || '' : '',
+        'Nama Pasangan': m.spouseId ? idToNameMap.get(m.spouseId) || '' : ''
+      }));
+
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Database Silsilah");
+      XLSX.writeFile(workbook, `Database_Silsilah_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+      setMessage({ text: 'Database berhasil diekspor!', type: 'success' });
+    } catch (err: any) {
+      console.error('Export Error:', err);
+      setMessage({ text: `Gagal: ${err.message}`, type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // ... logic upload tetap sama
     const file = e.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = async (evt) => {
       setIsLoading(true);
-      setMessage({ text: 'Membaca file Excel...', type: '' });
+      setMessage({ text: 'Memproses file Excel...', type: '' });
       
       try {
         const bstr = evt.target?.result;
@@ -70,36 +102,49 @@ export default function ExcelImport({ userId, currentUserRole, isCompact = false
         const data = XLSX.utils.sheet_to_json(ws) as any[];
 
         if (!data || data.length === 0) {
-          throw new Error('File kosong atau format kolom tidak sesuai.');
+          throw new Error('File tidak valid atau kosong.');
         }
 
+        const client = getSupabaseClient();
+        
+        // Ambil data yang sudah ada untuk memetakan nama ke ID dan mencegah duplikat
+        const { data: existingMembers } = await client.from('family_members').select('id, fullName');
         const nameToIdMap = new Map<string, string>();
-        const tempMembers: any[] = [];
+        existingMembers?.forEach(m => nameToIdMap.set(m.fullName.toUpperCase(), m.id));
 
+        // Tambahkan pemetaan dari ID Excel jika ada
         data.forEach((row: any) => {
+          const excelId = row['ID']?.toString().trim();
           const name = row['Nama Lengkap']?.toString().trim().toUpperCase();
-          if (name && !nameToIdMap.has(name)) {
+          if (excelId && name) {
+            nameToIdMap.set(name, excelId);
+          } else if (name && !nameToIdMap.has(name)) {
             nameToIdMap.set(name, crypto.randomUUID());
           }
         });
 
-        const processedNames = new Set<string>();
+        const tempMembers: any[] = [];
+        const processedIds = new Set<string>();
+
         for (const row of data) {
           const fullName = row['Nama Lengkap']?.toString().trim().toUpperCase();
-          if (!fullName || processedNames.has(fullName)) continue;
+          if (!fullName) continue;
 
-          processedNames.add(fullName);
-          const id = nameToIdMap.get(fullName) || crypto.randomUUID();
+          // Prioritaskan ID dari file Excel (untuk edit)
+          const id = row['ID']?.toString().trim() || nameToIdMap.get(fullName) || crypto.randomUUID();
+          
+          if (processedIds.has(id)) continue;
+          processedIds.add(id);
+
           const genderInput = row['Jenis Kelamin']?.toString().trim().toUpperCase();
           const statusInput = row['Status']?.toString().trim().toUpperCase();
-
           const fatherName = row['Nama Ayah']?.toString().trim().toUpperCase();
           const motherName = row['Nama Ibu']?.toString().trim().toUpperCase();
           const spouseName = row['Nama Pasangan']?.toString().trim().toUpperCase();
 
           tempMembers.push({
             id,
-            fullName,
+            fullName: row['Nama Lengkap']?.toString().trim(),
             gender: genderInput === 'P' ? 'female' : 'male',
             isAlive: statusInput !== 'WAFAT',
             birthDate: row['Tanggal Lahir'] && row['Tanggal Lahir'] !== '-' ? String(row['Tanggal Lahir']) : '',
@@ -112,28 +157,24 @@ export default function ExcelImport({ userId, currentUserRole, isCompact = false
             parentId: fatherName && nameToIdMap.has(fatherName) ? nameToIdMap.get(fatherName) : null,
             motherId: motherName && nameToIdMap.has(motherName) ? nameToIdMap.get(motherName) : null,
             spouseId: spouseName && nameToIdMap.has(spouseName) ? nameToIdMap.get(spouseName) : null,
-            photoUrl: '',
-            createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           });
         }
 
         if (tempMembers.length === 0) throw new Error('Tidak ada data valid untuk diimpor.');
 
-        const client = getSupabaseClient();
-        const { error: insertError } = await client
+        const { error: upsertError } = await client
           .from('family_members')
           .upsert(tempMembers, { onConflict: 'id' });
 
-        if (insertError) throw insertError;
+        if (upsertError) throw upsertError;
 
-        setMessage({ text: `Berhasil mengimpor ${tempMembers.length} anggota keluarga!`, type: 'success' });
+        setMessage({ text: `Berhasil memproses ${tempMembers.length} data keluarga!`, type: 'success' });
         if (fileInputRef.current) fileInputRef.current.value = '';
         
       } catch (err: any) {
         console.error('Import Error:', err);
-        const errorMsg = err.message || err.details || 'Terjadi kesalahan sistem';
-        setMessage({ text: `Gagal: ${errorMsg}`, type: 'error' });
+        setMessage({ text: `Gagal Impor: ${err.message}`, type: 'error' });
       } finally {
         setIsLoading(false);
       }
@@ -151,34 +192,48 @@ export default function ExcelImport({ userId, currentUserRole, isCompact = false
         title="Download Template Excel"
       >
         <Download className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'} text-emerald-400`} />
-        {!isCompact && <span>Template Excel</span>}
+        {!isCompact && <span>Template</span>}
       </button>
 
       {isAdmin && (
-        <div className="relative">
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            accept=".xlsx, .xls"
-            className="hidden"
-          />
+        <>
           <button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={exportDatabase}
             disabled={isLoading}
-            className={`flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors border border-emerald-500 shadow-sm disabled:opacity-50 ${
+            className={`flex items-center justify-center gap-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors border border-white/20 shadow-sm disabled:opacity-50 ${
               isCompact ? 'px-2 py-1.5 text-[10px]' : 'px-4 py-2 text-sm font-medium'
             }`}
-            title="Import File Excel"
+            title="Export Database ke Excel"
           >
-            {isLoading ? (
-              <div className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'} border-2 border-white/30 border-t-white rounded-full animate-spin`} />
-            ) : (
-              <Upload className={isCompact ? 'w-3 h-3' : 'w-4 h-4'} />
-            )}
-            {!isCompact && <span>{isLoading ? 'Impor...' : 'Import Excel'}</span>}
+            <Database className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'} text-amber-400`} />
+            {!isCompact && <span>Ekspor Data</span>}
           </button>
-        </div>
+
+          <div className="relative">
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              accept=".xlsx, .xls"
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading}
+              className={`flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors border border-emerald-500 shadow-sm disabled:opacity-50 ${
+                isCompact ? 'px-2 py-1.5 text-[10px]' : 'px-4 py-2 text-sm font-medium'
+              }`}
+              title="Import File Excel"
+            >
+              {isLoading ? (
+                <div className={`${isCompact ? 'w-3 h-3' : 'w-4 h-4'} border-2 border-white/30 border-t-white rounded-full animate-spin`} />
+              ) : (
+                <Upload className={isCompact ? 'w-3 h-3' : 'w-4 h-4'} />
+              )}
+              {!isCompact && <span>{isLoading ? 'Memproses...' : 'Impor Excel'}</span>}
+            </button>
+          </div>
+        </>
       )}
 
       {message.text && (
