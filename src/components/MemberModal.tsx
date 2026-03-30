@@ -71,7 +71,24 @@ export default function MemberModal({ isOpen, onClose, onSave, editingMember, me
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(editingMember ? { ...formData, id: editingMember.id, ownerId: editingMember.ownerId, createdAt: editingMember.createdAt, updatedAt: new Date().toISOString() } : formData);
+    
+    // Sanitasi data: Pastikan kolom relasi (UUID) bernilai null jika tidak dipilih, agar tidak error di database
+    const sanitizedData = {
+      ...formData,
+      parentId: formData.parentId || null,
+      motherId: formData.motherId || null,
+      spouseId: formData.spouseId || null,
+      // Opsional: bersihkan kolom lain juga untuk data yang lebih rapi
+      birthDate: formData.birthDate || null,
+      deathDate: formData.deathDate || null,
+      phone: formData.phone || null,
+      address: formData.address || null,
+      occupation: formData.occupation || null,
+      education: formData.education || null,
+      bio: formData.bio || null,
+    };
+
+    onSave(editingMember ? { ...sanitizedData, id: editingMember.id, ownerId: editingMember.ownerId, createdAt: editingMember.createdAt, updatedAt: new Date().toISOString() } as FamilyMember : sanitizedData as NewFamilyMember);
   };
 
   return (
