@@ -20,10 +20,11 @@ import ExcelImport from './components/ExcelImport';
 import StatsView from './components/StatsView';
 import IslamicWelcome from './components/IslamicWelcome';
 import ForumView from './components/ForumView';
+import RelationshipManager from './components/RelationshipManager';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import {
   LogOut, Plus, Users, Loader2, LayoutGrid, List,
-  BarChart2, ShieldCheck, MessageSquare, CheckCircle2, AlertCircle, X
+  BarChart2, ShieldCheck, MessageSquare, CheckCircle2, AlertCircle, X, Network
 } from 'lucide-react';
 
 function AppContent() {
@@ -35,7 +36,7 @@ function AppContent() {
   const [selectedMember, setSelectedMember] = useState<FamilyMember | null>(null);
   const [editingMember, setEditingMember] = useState<FamilyMember | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<'tree' | 'directory' | 'users' | 'stats' | 'forum'>('tree');
+  const [viewMode, setViewMode] = useState<'tree' | 'directory' | 'users' | 'stats' | 'forum' | 'relations'>('tree');
   const [hasSeenWelcome, setHasSeenWelcome] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ text: string; type: 'success' | 'error' | '' }>({ text: '', type: '' });
 
@@ -214,6 +215,14 @@ function AppContent() {
                     <span className="hidden sm:inline">Statistik</span>
                   </button>
                   <button
+                    onClick={() => setViewMode('relations')}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${viewMode === 'relations' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                      }`}
+                  >
+                    <Network className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Relasi Keluarga</span>
+                  </button>
+                  <button
                     onClick={() => setViewMode('forum')}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${viewMode === 'forum' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
                       }`}
@@ -329,6 +338,8 @@ function AppContent() {
           />
         ) : viewMode === 'stats' ? (
           <StatsView members={members} />
+        ) : viewMode === 'relations' ? (
+          <RelationshipManager members={members} currentUserRole={userRole} onUpdateRelation={handleSaveMember} />
         ) : viewMode === 'forum' ? (
           <ForumView currentUser={user} isAdmin={userRole === 'admin'} />
         ) : (
