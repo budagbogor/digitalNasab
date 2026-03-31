@@ -33,126 +33,38 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
 
   g.setDefaultEdgeLabel(() => ({}));
 
-  // 1. Setup Anchors vs Dependents (Spouses)
-  // Anchor adalah node yang memiliki parentId ATAU dia adalah root
-  // Semua node lainnya akan menjadi dependent dari anchor yang menjadi spouse-nya.
-  const anchorIds = new Set<string>();
-  
-  nodes.forEach(n => {
-    if (n.data.member.parentId) {
-      anchorIds.add(n.id); // Anak otomatis jadi anchor di jalurnya
-    }
-  });
-  
-  const rootMember = nodes.find(n => n.data.member.fullName.toLowerCase().includes('iman diharjo'));
-  if (rootMember) anchorIds.add(rootMember.id);
-
-  // Jika ada member yang belum jadi anchor, cek apakah dia pasangan dari seorang anchor.
-  nodes.forEach(n => {
-    if (!anchorIds.has(n.id)) {
-      const spouseEdge = edges.find(e => e.id.startsWith('e-spouse-') && (e.source === n.id || e.target === n.id));
-      if (spouseEdge) {
-        const spouseId = spouseEdge.source === n.id ? spouseEdge.target : spouseEdge.source;
-        if (!anchorIds.has(spouseId)) {
-           // Keduanya bukan anchor, force male to be anchor to prevent floating
-           if (n.data.member.gender === 'male') {
-             anchorIds.add(n.id);
-           }
-        }
-      } else {
-        // Node melayang tanpa pasangan dan ortu (Safeguard)
-        anchorIds.add(n.id);
-      }
-    }
-  });
-
-  // 2. Map Anchor ke list of Dependents
-  const anchorToDependents = new Map<string, Node[]>();
-  anchorIds.forEach(id => anchorToDependents.set(id, []));
-
-  nodes.forEach(n => {
-    if (!anchorIds.has(n.id)) {
-      const spouseEdge = edges.find(e => e.id.startsWith('e-spouse-') && (e.source === n.id || e.target === n.id));
-      if (spouseEdge) {
-        const anchorId = spouseEdge.source === n.id ? spouseEdge.target : spouseEdge.source;
-        if (anchorToDependents.has(anchorId)) {
-          anchorToDependents.get(anchorId)!.push(n);
-        }
-      }
-    }
-  });
-
-  // 3. Masukkan HANYA Anchors ke Dagre dengan dimensi "Fat Node" (Kotak Raksasa)
+  // Masukkan semua node dengan dimensi tetap
   nodes.forEach(node => {
-    if (anchorIds.has(node.id)) {
-      const dependentsCount = anchorToDependents.get(node.id)?.length || 0;
-      
-      let effectiveWidth = nodeWidth;
-      let effectiveHeight = nodeHeight;
-      
-      if (direction === 'LR') {
-        effectiveHeight = nodeHeight + dependentsCount * (nodeHeight + spouseGap);
-      } else {
-        effectiveWidth = nodeWidth + dependentsCount * (nodeWidth + spouseGap);
-      }
-      
-      g.setNode(node.id, { width: effectiveWidth, height: effectiveHeight });
-    }
+    g.setNode(node.id, { width: nodeWidth, height: nodeHeight });
   });
 
-  // 4. Masukkan garis (edges) ke Dagre, TAPI abaikan garis pasangan (spouse)
-  // Ini mencegak spouse force-flow dan membiarkan Dagre fokus pada nasab/darah murni.
+  // Masukkan edges. Rahasianya: pasangan memiliki minlen=0 agar berada di level rank (generasi) yang sama.
   edges.forEach(edge => {
-    if (!edge.id.startsWith('e-spouse-') && g.hasNode(edge.source) && g.hasNode(edge.target)) {
-      g.setEdge(edge.source, edge.target, { weight: 1, minlen: 1 });
+    if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
+      const isSpouse = edge.id.startsWith('e-spouse-');
+      g.setEdge(edge.source, edge.target, {
+        weight: isSpouse ? 10000 : 1, // Prioritas absolut agar pasangan sangat berdekatan
+        minlen: isSpouse ? 0 : 1, // minlen 0 memaksa Dagre meletakkan mereka berdampingan di rank yg sama
+      });
     }
   });
 
+  // Hitung layout
   dagre.layout(g);
 
-  // 5. Pecah Bounding Box Raksasa menjadi koordinat individual untuk React Flow
-  const layoutedNodes: Node[] = [];
-
-  nodes.forEach(node => {
-    if (anchorIds.has(node.id)) {
-      const nodeWithPosition = g.node(node.id);
-      const dependents = anchorToDependents.get(node.id) || [];
-      const dependentsCount = dependents.length;
-
-      let effectiveWidth = nodeWidth;
-      let effectiveHeight = nodeHeight;
-      if (direction === 'LR') {
-        effectiveHeight = nodeHeight + dependentsCount * (nodeHeight + spouseGap);
-      } else {
-        effectiveWidth = nodeWidth + dependentsCount * (nodeWidth + spouseGap);
-      }
-
-      // Koordinat utama dari Bounding Box (Pojok kiri atas)
-      const boxLeft = nodeWithPosition.x - effectiveWidth / 2;
-      const boxTop = nodeWithPosition.y - effectiveHeight / 2;
-
-      // 5a. Anchor selalu menduduki slot pertama di pojok bounding box
-      layoutedNodes.push({
-        ...node,
-        targetPosition: direction === 'LR' ? Position.Left : Position.Top,
-        sourcePosition: direction === 'LR' ? Position.Right : Position.Bottom,
-        position: { x: boxLeft, y: boxTop },
-      });
-
-      // 5b. Pasangan menduduki slot-slot sebelahnya secara absolut berurutan
-      dependents.forEach((dep, index) => {
-        const offset = (index + 1);
-        const depX = direction === 'LR' ? boxLeft : boxLeft + offset * (nodeWidth + spouseGap);
-        const depY = direction === 'TB' ? boxTop : boxTop + offset * (nodeHeight + spouseGap);
-
-        layoutedNodes.push({
-          ...dep,
-          targetPosition: direction === 'LR' ? Position.Left : Position.Top,
-          sourcePosition: direction === 'LR' ? Position.Right : Position.Bottom,
-          position: { x: depX, y: depY },
-        });
-      });
-    }
+  // Map posisi dari Dagre ke node ReactFlow
+  const layoutedNodes = nodes.map(node => {
+    const nodeWithPosition = g.node(node.id);
+    
+    return {
+      ...node,
+      targetPosition: direction === 'LR' ? Position.Left : Position.Top,
+      sourcePosition: direction === 'LR' ? Position.Right : Position.Bottom,
+      position: {
+        x: nodeWithPosition.x - nodeWidth / 2,
+        y: nodeWithPosition.y - nodeHeight / 2,
+      },
+    };
   });
 
   return { nodes: layoutedNodes, edges };
@@ -327,7 +239,7 @@ export default function TreeView({ members, onNodeClick, onEditClick, currentUse
             target: member.spouseId,
             sourceHandle: 'spouse-source',
             targetHandle: 'spouse-target',
-            type: 'step', // Jalur orthogonal (siku 90 derajat)
+            type: 'straight', // Jalur lurus langsung (menghindari siku yang nabrak anak)
             style: { stroke: '#f59e0b', strokeWidth: 2.5, strokeDasharray: '6,6' }, 
             label: '❤️',
             labelStyle: { fill: '#b45309', fontWeight: 800, fontSize: 12 },
