@@ -43,7 +43,7 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
     if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
       const isSpouse = edge.id.startsWith('e-spouse-');
       g.setEdge(edge.source, edge.target, {
-        weight: isSpouse ? 50 : 1,
+        weight: isSpouse ? 10000 : 1, // Prioritas absolut agar pasangan sangat berdekatan
         minlen: isSpouse ? 0 : 1, // minlen 0 memaksa Dagre meletakkan mereka berdampingan di rank yg sama
       });
     }
@@ -110,17 +110,19 @@ const CustomNode = ({ data }: { data: any }) => {
         className="w-3 h-3 !bg-emerald-600 border-2 !border-white shadow-sm" 
       />
       
-      {/* Handles untuk Pasangan (Dinamis agar tidak tabrakan dengan garis nasab) */}
+      {/* Handles untuk Pasangan (Digeser 20% agar tidak terpusat / tumpang tindih) */}
       <Handle 
         type="source" 
         id="spouse-source" 
         position={isHorizontal ? Position.Bottom : Position.Right} 
+        style={isHorizontal ? { left: '20%' } : { top: '20%' }}
         className="w-3 h-3 !bg-amber-500 border-2 !border-white shadow-sm" 
       />
       <Handle 
         type="target" 
         id="spouse-target" 
         position={isHorizontal ? Position.Top : Position.Left} 
+        style={isHorizontal ? { left: '20%' } : { top: '20%' }}
         className="w-3 h-3 !bg-amber-500 border-2 !border-white shadow-sm" 
       />
       
@@ -220,11 +222,11 @@ export default function TreeView({ members, onNodeClick, onEditClick, currentUse
           target: member.id,
           sourceHandle: 'source',
           targetHandle: 'target',
-          type: 'smoothstep',
+          type: 'step', // Jalur orthogonal (siku 90 derajat)
           animated: true,
-          style: { stroke: '#059669', strokeWidth: 3 }, 
+          style: { stroke: '#059669', strokeWidth: 2.5 }, 
           markerEnd: { type: MarkerType.ArrowClosed, color: '#059669', width: 15, height: 15 },
-          markerStart: 'junction-dot',
+          markerStart: 'junction-dot', // Menjadi indikator koneksi fisik
         });
       }
       if (member.spouseId && connectedIds.has(member.spouseId)) {
@@ -237,8 +239,8 @@ export default function TreeView({ members, onNodeClick, onEditClick, currentUse
             target: member.spouseId,
             sourceHandle: 'spouse-source',
             targetHandle: 'spouse-target',
-            type: 'smoothstep', 
-            style: { stroke: '#f59e0b', strokeWidth: 3, strokeDasharray: '8,5' }, 
+            type: 'step', // Jalur orthogonal (siku 90 derajat)
+            style: { stroke: '#f59e0b', strokeWidth: 2.5, strokeDasharray: '6,6' }, 
             label: '❤️',
             labelStyle: { fill: '#b45309', fontWeight: 800, fontSize: 12 },
             labelBgStyle: { fill: '#fef3c7', fillOpacity: 0.8, rx: 4, ry: 4 },
@@ -259,6 +261,22 @@ export default function TreeView({ members, onNodeClick, onEditClick, currentUse
 
   return (
     <div className="absolute inset-0 bg-emerald-50/30 overflow-hidden">
+      {/* Definisi SVG Custom Marker untuk Junction Dot */}
+      <svg style={{ position: 'absolute', width: 0, height: 0 }}>
+        <defs>
+          <marker
+            id="junction-dot"
+            markerWidth="12"
+            markerHeight="12"
+            refX="6"
+            refY="6"
+            orient="auto"
+          >
+            <circle cx="6" cy="6" r="4" fill="#059669" />
+          </marker>
+        </defs>
+      </svg>
+
       {/* Mode Switcher */}
       <div className="absolute top-4 right-4 z-50 flex items-center gap-1 bg-white/90 backdrop-blur-sm p-1.5 rounded-2xl shadow-xl border border-emerald-100">
         <button
