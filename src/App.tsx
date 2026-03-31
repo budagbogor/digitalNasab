@@ -154,6 +154,51 @@ function AppContent() {
     }
   };
 
+  const handleUpdateRelation = async (memberData: FamilyMember) => {
+    try {
+      const client = getSupabaseClient();
+      const { error } = await client
+        .from('family_members')
+        .update({ parentId: memberData.parentId, motherId: memberData.motherId, spouseId: memberData.spouseId, updatedAt: new Date().toISOString() })
+        .eq('id', memberData.id);
+      if (error) throw error;
+      setSaveMessage({ text: `Relasi ${memberData.fullName} berhasil diperbarui!`, type: 'success' });
+      setTimeout(() => setSaveMessage({ text: '', type: '' }), 4000);
+    } catch (error: any) {
+      console.error('Error updating relation:', error);
+      setSaveMessage({ text: `Gagal memperbarui relasi: ${error.message}`, type: 'error' });
+    }
+  };
+
+  const handleQuickAddChild = async (fullName: string, gender: 'male' | 'female', parentTargetId: string, parentGender: 'male' | 'female') => {
+    try {
+      if (!fullName.trim()) return;
+      const client = getSupabaseClient();
+      const newId = crypto.randomUUID();
+      const payload: any = {
+        id: newId,
+        fullName,
+        gender,
+        isAlive: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      // Relasikan otomatis berdasarkan gender si target orang tua.
+      if (parentGender === 'male') {
+        payload.parentId = parentTargetId;
+      } else {
+        payload.motherId = parentTargetId;
+      }
+      
+      const { error } = await client.from('family_members').insert([payload]);
+      if (error) throw error;
+      setSaveMessage({ text: `Anak ${fullName} berhasil ditambahkan!`, type: 'success' });
+      setTimeout(() => setSaveMessage({ text: '', type: '' }), 4000);
+    } catch (error: any) {
+      setSaveMessage({ text: `Gagal menambah anak: ${error.message}`, type: 'error' });
+    }
+  };
+
   const handleNodeClick = (member: FamilyMember) => {
     setSelectedMember(member);
     setIsProfileModalOpen(true);
@@ -339,7 +384,13 @@ function AppContent() {
         ) : viewMode === 'stats' ? (
           <StatsView members={members} />
         ) : viewMode === 'relations' ? (
-          <RelationshipManager members={members} currentUserRole={userRole} onUpdateRelation={handleSaveMember} />
+          <RelationshipManager 
+            members={members} 
+            currentUserRole={userRole} 
+            onUpdateRelation={handleUpdateRelation} 
+            onDeleteRelation={handleDeleteMember}
+            onQuickAddChild={handleQuickAddChild}
+          />
         ) : viewMode === 'forum' ? (
           <ForumView currentUser={user} isAdmin={userRole === 'admin'} />
         ) : (

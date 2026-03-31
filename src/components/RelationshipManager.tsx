@@ -1,17 +1,22 @@
 import React, { useState, useMemo } from 'react';
 import { FamilyMember, UserRole } from '../types';
-import { Search, Edit2, User, X, CheckCircle2, AlertCircle, Users, Activity } from 'lucide-react';
+import { Search, Edit2, User, X, CheckCircle2, Activity, Plus, Trash2 } from 'lucide-react';
 
 interface Props {
   members: FamilyMember[];
   currentUserRole: UserRole;
   onUpdateRelation: (member: FamilyMember) => Promise<void>;
+  onDeleteRelation: (id: string) => Promise<void>;
+  onQuickAddChild: (fullName: string, gender: 'male'|'female', targetId: string, parentGender: 'male'|'female') => Promise<void>;
 }
 
-export default function RelationshipManager({ members, currentUserRole, onUpdateRelation }: Props) {
+export default function RelationshipManager({ members, currentUserRole, onUpdateRelation, onDeleteRelation, onQuickAddChild }: Props) {
   const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingChild, setIsSavingChild] = useState(false);
+  const [newChildName, setNewChildName] = useState('');
+  const [newChildGender, setNewChildGender] = useState<'male'|'female'>('male');
   
   // States for the active edit form
   const [editFormData, setEditFormData] = useState<{
@@ -208,17 +213,51 @@ export default function RelationshipManager({ members, currentUserRole, onUpdate
                       )}
                     </td>
 
-                    {/* KOLOM ANAK (Otomatis/Read-Only) */}
+                    {/* KOLOM ANAK (Otomatis/Read-Only + Quick Add) */}
                     <td className="p-4 align-top">
-                      <div className="flex flex-wrap gap-1">
-                        {children.length > 0 ? (
-                          children.map(child => (
-                            <span key={child.id} className="text-[11px] bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-md mb-1 break-words">
-                              {child.fullName}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-[11px] text-gray-400 italic bg-gray-50 px-2 py-1 flex items-center border border-dashed border-gray-200">Tidak ada data anak</span>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap gap-1">
+                          {children.length > 0 ? (
+                            children.map(child => (
+                              <span key={child.id} className="text-[11px] bg-slate-100 border border-slate-200 text-slate-700 px-2 py-1 rounded-md break-words">
+                                {child.fullName}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[11px] text-gray-400 italic bg-gray-50 px-2 py-1 border border-dashed border-gray-200 rounded-md">Tidak ada data anak</span>
+                          )}
+                        </div>
+                        {isEditing && (
+                          <div className="flex flex-col gap-1 mt-1 p-2 bg-gray-50 border border-gray-200 rounded-lg shadow-inner">
+                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Tambah Anak Baru</span>
+                            <div className="flex items-center gap-1.5">
+                              <input 
+                                type="text" placeholder="Nama Lengkap..." 
+                                className="text-xs p-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-emerald-500 w-full bg-white"
+                                value={newChildName} onChange={e => setNewChildName(e.target.value)}
+                              />
+                              <select 
+                                className="text-[10px] p-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-emerald-500 bg-white"
+                                value={newChildGender} onChange={e => setNewChildGender(e.target.value as any)}
+                              >
+                                <option value="male">L</option><option value="female">P</option>
+                              </select>
+                              <button 
+                                onClick={async () => {
+                                  if (!newChildName.trim()) return;
+                                  setIsSavingChild(true);
+                                  await onQuickAddChild(newChildName, newChildGender, member.id, member.gender);
+                                  setNewChildName(''); 
+                                  setIsSavingChild(false);
+                                }}
+                                disabled={isSavingChild || !newChildName.trim()}
+                                className="bg-emerald-600 text-white p-1.5 rounded hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-sm"
+                                title="Tambah Anak Cepat"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
                         )}
                       </div>
                     </td>
@@ -244,13 +283,22 @@ export default function RelationshipManager({ members, currentUserRole, onUpdate
                             </button>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => handleEditClick(member)}
-                            className="bg-white border rounded shadow p-2 hover:bg-emerald-50 text-emerald-700"
-                            title="Edit Relasi Keluarga"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex gap-2 justify-center">
+                            <button
+                              onClick={() => handleEditClick(member)}
+                              className="bg-white border border-gray-200 rounded-lg shadow-sm p-2 hover:bg-emerald-50 text-emerald-700 transition"
+                              title="Edit Relasi Keluarga"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => onDeleteRelation(member.id)}
+                              className="bg-white border border-gray-200 rounded-lg shadow-sm p-2 hover:bg-red-50 text-red-600 transition"
+                              title="Hapus Anggota"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         )
                       ) : (
                         <span className="text-[10px] text-gray-400 block p-2 bg-gray-50 border rounded-lg">Tanpa Akses</span>
