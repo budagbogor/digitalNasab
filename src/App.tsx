@@ -5,7 +5,7 @@ import MaintenancePage from './components/MaintenancePage';
 // 🔧 MAINTENANCE MODE – Ganti ke `false` untuk
 //    mengembalikan website ke mode normal
 // =============================================
-const MAINTENANCE_MODE = true;
+const MAINTENANCE_MODE = false;
 import { getSupabaseClient } from './lib/supabase';
 import { FamilyMember, NewFamilyMember, UserRole } from './types';
 import Auth from './components/Auth';
@@ -21,9 +21,9 @@ import StatsView from './components/StatsView';
 import IslamicWelcome from './components/IslamicWelcome';
 import ForumView from './components/ForumView';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
-import { 
-  LogOut, Plus, Users, Loader2, LayoutGrid, List, 
-  BarChart2, ShieldCheck, MessageSquare, CheckCircle2, AlertCircle, X 
+import {
+  LogOut, Plus, Users, Loader2, LayoutGrid, List,
+  BarChart2, ShieldCheck, MessageSquare, CheckCircle2, AlertCircle, X
 } from 'lucide-react';
 
 function AppContent() {
@@ -38,7 +38,7 @@ function AppContent() {
   const [viewMode, setViewMode] = useState<'tree' | 'directory' | 'users' | 'stats' | 'forum'>('tree');
   const [hasSeenWelcome, setHasSeenWelcome] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ text: string; type: 'success' | 'error' | '' }>({ text: '', type: '' });
-  
+
   const { isConfigured } = useSettings();
 
   // Auth & Session Management
@@ -49,7 +49,7 @@ function AppContent() {
     }
 
     const client = getSupabaseClient();
-    
+
     client.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (!session) setIsLoading(false);
@@ -74,7 +74,7 @@ function AppContent() {
       setIsLoading(true);
       try {
         const client = getSupabaseClient();
-        
+
         // 1. Fetch Role
         const { data: roleData } = await client
           .from('users')
@@ -173,7 +173,7 @@ function AppContent() {
       <header className="bg-emerald-900 text-white shadow-2xl z-20 sticky top-0 border-b border-emerald-800/50">
         <div className="max-w-7xl mx-auto px-4 h-auto lg:h-20 py-3 lg:py-0">
           <div className="flex flex-col lg:flex-row items-center justify-between h-full gap-4 lg:gap-6">
-            
+
             {/* 1. BRAND AREA (LOGO) - LEFT */}
             <div className="flex items-center gap-3 shrink-0">
               <div className="bg-emerald-700 p-2 rounded-xl shadow-inner border border-emerald-600/50 transform -rotate-2 hover:rotate-0 transition-all duration-300">
@@ -191,36 +191,32 @@ function AppContent() {
                 <div className="flex items-center gap-0.5 min-w-max">
                   <button
                     onClick={() => setViewMode('tree')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${
-                      viewMode === 'tree' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
-                    }`}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${viewMode === 'tree' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                      }`}
                   >
                     <LayoutGrid className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Silsilah</span>
                   </button>
                   <button
                     onClick={() => setViewMode('directory')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${
-                      viewMode === 'directory' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
-                    }`}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${viewMode === 'directory' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                      }`}
                   >
                     <List className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Direktori</span>
                   </button>
                   <button
                     onClick={() => setViewMode('stats')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${
-                      viewMode === 'stats' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
-                    }`}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${viewMode === 'stats' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                      }`}
                   >
                     <BarChart2 className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Statistik</span>
                   </button>
                   <button
                     onClick={() => setViewMode('forum')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${
-                      viewMode === 'forum' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
-                    }`}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${viewMode === 'forum' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                      }`}
                   >
                     <MessageSquare className="w-3.5 h-3.5" />
                     <span className="hidden sm:inline">Forum</span>
@@ -228,9 +224,8 @@ function AppContent() {
                   {userRole === 'admin' && (
                     <button
                       onClick={() => setViewMode('users')}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${
-                        viewMode === 'users' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
-                      }`}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs md:text-sm font-bold transition-all duration-200 ${viewMode === 'users' ? 'bg-emerald-600 text-white shadow-md' : 'text-emerald-300 hover:text-white hover:bg-emerald-800/50'
+                        }`}
                     >
                       <ShieldCheck className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">Akses</span>
@@ -266,10 +261,10 @@ function AppContent() {
                   </div>
                 )}
               </div>
-              
+
               <div className="flex items-center gap-2 pl-2 border-l border-emerald-800/50">
                 <SettingsMenu currentUserRole={userRole} />
-                <button 
+                <button
                   onClick={() => getSupabaseClient().auth.signOut()}
                   className="p-2 text-emerald-300 hover:text-white hover:bg-white/10 rounded-lg transition-all"
                   title="Keluar"
@@ -318,19 +313,19 @@ function AppContent() {
             )}
           </div>
         ) : viewMode === 'tree' ? (
-          <TreeView 
-            members={members} 
-            onNodeClick={handleNodeClick} 
-            onEditClick={handleEditClick} 
-            currentUserRole={userRole} 
+          <TreeView
+            members={members}
+            onNodeClick={handleNodeClick}
+            onEditClick={handleEditClick}
+            currentUserRole={userRole}
           />
         ) : viewMode === 'directory' ? (
-          <DirectoryView 
-            members={members} 
-            onEdit={handleEditClick} 
-            onDelete={handleDeleteMember} 
+          <DirectoryView
+            members={members}
+            onEdit={handleEditClick}
+            onDelete={handleDeleteMember}
             onMemberClick={handleNodeClick}
-            currentUserRole={userRole} 
+            currentUserRole={userRole}
           />
         ) : viewMode === 'stats' ? (
           <StatsView members={members} />
@@ -364,7 +359,7 @@ function AppContent() {
         editingMember={editingMember}
         members={members}
       />
-      
+
       <ProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
@@ -379,17 +374,16 @@ function AppContent() {
 
       {/* Global Toast Notification */}
       {saveMessage.text && (
-        <div className={`fixed bottom-6 right-6 flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl z-[100] animate-in fade-in slide-in-from-bottom-4 duration-300 border ${
-          saveMessage.type === 'success' ? 'bg-emerald-600 text-white border-emerald-500' : 
-          saveMessage.type === 'error' ? 'bg-red-600 text-white border-red-500' : 'bg-gray-800 text-white border-gray-700'
-        }`}>
+        <div className={`fixed bottom-6 right-6 flex items-center gap-3 px-5 py-4 rounded-2xl shadow-2xl z-[100] animate-in fade-in slide-in-from-bottom-4 duration-300 border ${saveMessage.type === 'success' ? 'bg-emerald-600 text-white border-emerald-500' :
+            saveMessage.type === 'error' ? 'bg-red-600 text-white border-red-500' : 'bg-gray-800 text-white border-gray-700'
+          }`}>
           {saveMessage.type === 'success' && <CheckCircle2 className="w-6 h-6" />}
           {saveMessage.type === 'error' && <AlertCircle className="w-6 h-6" />}
           <div className="flex flex-col">
             <span className="font-black text-xs uppercase tracking-widest opacity-70 leading-tight mb-0.5">Notifikasi</span>
             <span className="font-bold text-sm tracking-tight">{saveMessage.text}</span>
           </div>
-          <button 
+          <button
             onClick={() => setSaveMessage({ text: '', type: '' })}
             className="ml-4 hover:bg-white/20 p-1.5 rounded-full transition-colors"
           >
