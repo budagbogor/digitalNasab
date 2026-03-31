@@ -33,19 +33,18 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
 
   g.setDefaultEdgeLabel(() => ({}));
 
-  // Masukkan semua node dengan dimensi tetap
+  // Masukkan semua node anchor dengan dimensi dinamis (mendukung slot berlapis untuk spouse)
   nodes.forEach(node => {
-    g.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+    const spouseCount = node.data?.spouses?.length || 0;
+    // Base height 100, ditambah 100 untuk setiap Istri, ditambah gap 10
+    const dynamicHeight = nodeHeight + (spouseCount * (nodeHeight + 10)); 
+    g.setNode(node.id, { width: nodeWidth, height: dynamicHeight });
   });
 
-  // Masukkan edges. Rahasianya: pasangan memiliki minlen=0 agar berada di level rank (generasi) yang sama.
+  // Masukkan edges keturunan murni
   edges.forEach(edge => {
     if (g.hasNode(edge.source) && g.hasNode(edge.target)) {
-      const isSpouse = edge.id.startsWith('e-spouse-');
-      g.setEdge(edge.source, edge.target, {
-        weight: isSpouse ? 10000 : 1, // Prioritas absolut agar pasangan sangat berdekatan
-        minlen: isSpouse ? 0 : 1, // minlen 0 memaksa Dagre meletakkan mereka berdampingan di rank yg sama
-      });
+      g.setEdge(edge.source, edge.target, { weight: 1, minlen: 1 });
     }
   });
 
@@ -55,6 +54,8 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
   // Map posisi dari Dagre ke node ReactFlow
   const layoutedNodes = nodes.map(node => {
     const nodeWithPosition = g.node(node.id);
+    const spouseCount = node.data?.spouses?.length || 0;
+    const dynamicHeight = nodeHeight + (spouseCount * (nodeHeight + 10));
     
     return {
       ...node,
@@ -62,7 +63,7 @@ const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => 
       sourcePosition: direction === 'LR' ? Position.Right : Position.Bottom,
       position: {
         x: nodeWithPosition.x - nodeWidth / 2,
-        y: nodeWithPosition.y - nodeHeight / 2,
+        y: nodeWithPosition.y - dynamicHeight / 2,
       },
     };
   });
@@ -79,11 +80,10 @@ interface TreeViewProps {
 }
 
 const CustomNode = ({ data }: { data: any }) => {
-  const { member, onEditClick, onInfoClick, currentUserRole, layoutDirection } = data;
+  const { member, spouses, onEditClick, onInfoClick, layoutDirection } = data;
   const isHorizontal = layoutDirection === 'LR';
   const isMale = member.gender === 'male';
   const isDeceased = !member.isAlive;
-  const isAdmin = currentUserRole === 'admin';
 
   // Warna yang jauh lebih kontras untuk membedakan Pria dan Wanita
   const bgColor = isDeceased ? 'bg-slate-100' : isMale ? 'bg-emerald-50' : 'bg-rose-50';
@@ -92,75 +92,112 @@ const CustomNode = ({ data }: { data: any }) => {
   const badgeBg = isDeceased ? 'bg-slate-200 text-slate-700' : isMale ? 'bg-emerald-200 text-emerald-800' : 'bg-rose-200 text-rose-800';
 
   return (
-    <div 
-      className={`relative px-3 py-3 shadow-md rounded-xl border-2 ${bgColor} ${borderColor} w-[280px] hover:shadow-xl hover:scale-[1.02] transition-all cursor-pointer`}
-      onClick={() => onInfoClick(member)}
-    >
-      {/* Handles untuk Keturunan (Dinamis: LR atau TB) */}
-      <Handle 
-        type="target" 
-        id="target" 
-        position={isHorizontal ? Position.Left : Position.Top} 
-        className="w-3 h-3 !bg-emerald-600 border-2 !border-white shadow-sm" 
-      />
-      <Handle 
-        type="source" 
-        id="source" 
-        position={isHorizontal ? Position.Right : Position.Bottom} 
-        className="w-3 h-3 !bg-emerald-600 border-2 !border-white shadow-sm" 
-      />
-      
-      {/* Handles untuk Pasangan (Digeser 20% agar tidak terpusat / tumpang tindih) */}
-      <Handle 
-        type="source" 
-        id="spouse-source" 
-        position={isHorizontal ? Position.Bottom : Position.Right} 
-        style={isHorizontal ? { left: '20%' } : { top: '20%' }}
-        className="w-3 h-3 !bg-amber-500 border-2 !border-white shadow-sm" 
-      />
-      <Handle 
-        type="target" 
-        id="spouse-target" 
-        position={isHorizontal ? Position.Top : Position.Left} 
-        style={isHorizontal ? { left: '20%' } : { top: '20%' }}
-        className="w-3 h-3 !bg-amber-500 border-2 !border-white shadow-sm" 
-      />
-      
-      <div className="flex items-center gap-3">
-        {member.photoUrl ? (
-          <img src={member.photoUrl} alt="Foto" className={`w-12 h-12 rounded-full object-cover border-2 shadow-sm ${isDeceased ? 'grayscale opacity-80 border-slate-300' : isMale ? 'border-emerald-400' : 'border-rose-400'}`} />
-        ) : (
-          <div className={`p-2 rounded-full bg-white shadow-sm border-2 ${borderColor} ${textColor}`}>
-            {isDeceased ? <Flower2 className="w-6 h-6" /> : <User className="w-6 h-6" />}
-          </div>
-        )}
+    <div className="flex flex-col gap-[10px]">
+      {/* Anchor Card */}
+      <div 
+        className={`relative px-3 py-3 shadow-md rounded-xl border-2 ${bgColor} ${borderColor} w-[280px] hover:shadow-xl hover:scale-[1.02] transition-all cursor-pointer bg-white`}
+        onClick={() => onInfoClick(member)}
+      >
+        {/* Handles untuk Keturunan (Dinamis: LR atau TB) */}
+        <Handle 
+          type="target" 
+          id="target" 
+          position={isHorizontal ? Position.Left : Position.Top} 
+          className="w-3 h-3 !bg-emerald-600 border-2 !border-white shadow-sm" 
+        />
+        <Handle 
+          type="source" 
+          id="source" 
+          position={isHorizontal ? Position.Right : Position.Bottom} 
+          className="w-3 h-3 !bg-emerald-600 border-2 !border-white shadow-sm" 
+        />
         
-        <div className="flex-1 min-w-0">
-          <h3 className={`font-bold text-sm leading-tight truncate uppercase ${textColor}`}>{member.fullName}</h3>
+        <div className="flex items-center gap-3">
+          {member.photoUrl ? (
+            <img src={member.photoUrl} alt="Foto" className={`w-12 h-12 rounded-full object-cover border-2 shadow-sm ${isDeceased ? 'grayscale opacity-80 border-slate-300' : isMale ? 'border-emerald-400' : 'border-rose-400'}`} />
+          ) : (
+            <div className={`p-2 rounded-full shadow-sm border-2 bg-white ${borderColor} ${textColor}`}>
+              {isDeceased ? <Flower2 className="w-6 h-6" /> : <User className="w-6 h-6" />}
+            </div>
+          )}
           
-          {/* Badge Status & Gender */}
-          <div className="flex flex-wrap items-center gap-2 mt-2">
-            <span className={`text-xs font-bold px-2.5 py-1 rounded-md ${badgeBg}`}>
-              {isMale ? 'Laki-laki' : 'Perempuan'}
-            </span>
-            {isDeceased && (
-              <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-slate-200 text-slate-700 border border-slate-300">
-                {isMale ? 'Almarhum' : 'Almarhumah'}
+          <div className="flex-1 min-w-0">
+            <h3 className={`font-bold text-sm leading-tight truncate uppercase ${textColor}`}>{member.fullName}</h3>
+            
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <span className={`text-xs font-bold px-2.5 py-1 rounded-md ${badgeBg}`}>
+                {isMale ? 'Laki-laki' : 'Perempuan'}
               </span>
-            )}
+              {isDeceased && (
+                <span className="text-xs font-bold px-2.5 py-1 rounded-md bg-slate-200 text-slate-700 border border-slate-300">
+                  {isDeceased ? 'Almarhum/ah' : ''}
+                </span>
+              )}
+            </div>
           </div>
+        </div>
+
+        <div className="absolute -top-3 -right-3 flex gap-1">
+          <button 
+            onClick={(e) => { e.stopPropagation(); onEditClick(member); }}
+            className="p-2 text-gray-600 hover:text-emerald-600 transition-colors bg-white rounded-full shadow-md border-2 border-gray-200 hover:border-emerald-400"
+            title="Edit"
+          >
+            <Edit2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
-      <div className="absolute -top-3 -right-3 flex gap-1">
-        <button 
-          onClick={(e) => { e.stopPropagation(); onEditClick(member); }}
-          className="p-2 text-gray-600 hover:text-emerald-600 transition-colors bg-white rounded-full shadow-md border-2 border-gray-200 hover:border-emerald-400"
-          title="Edit"
-        >
-          <Edit2 className="w-4 h-4" />
-        </button>
-      </div>
+      {/* Spouse Cards */}
+      {spouses && spouses.map((spouse: FamilyMember) => {
+        const sIsMale = spouse.gender === 'male';
+        const sIsDeceased = !spouse.isAlive;
+        const sBgColor = sIsDeceased ? 'bg-slate-100' : sIsMale ? 'bg-sky-50' : 'bg-fuchsia-50';
+        const sBorderColor = sIsDeceased ? 'border-slate-400' : sIsMale ? 'border-sky-500' : 'border-fuchsia-400';
+        const sTextColor = sIsDeceased ? 'text-slate-800' : sIsMale ? 'text-sky-950' : 'text-fuchsia-950';
+
+        return (
+          <div 
+            key={spouse.id}
+            className={`relative px-3 py-3 shadow-md rounded-xl border-2 ${sBgColor} ${sBorderColor} w-[280px] hover:shadow-xl hover:scale-[1.02] transition-all cursor-pointer opacity-95`}
+            onClick={() => onInfoClick(spouse)}
+          >
+            {/* Indikator Spouse (Menutupi border atas) */}
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-100 text-amber-800 text-[10px] px-3 py-0.5 rounded-full font-bold border border-amber-300 shadow-sm z-10 flex items-center gap-1">
+              ❤️ Pasangan
+            </div>
+            
+            <div className="flex items-center gap-3">
+              {spouse.photoUrl ? (
+                <img src={spouse.photoUrl} alt="Foto" className={`w-10 h-10 rounded-full object-cover border-2 shadow-sm ${sIsDeceased ? 'grayscale opacity-80 border-slate-300' : sIsMale ? 'border-sky-400' : 'border-fuchsia-400'}`} />
+              ) : (
+                <div className={`p-1.5 rounded-full bg-white shadow-sm border-2 ${sBorderColor} ${sTextColor}`}>
+                  {sIsDeceased ? <Flower2 className="w-5 h-5" /> : <User className="w-5 h-5" />}
+                </div>
+              )}
+              
+              <div className="flex-1 min-w-0">
+                <h3 className={`font-bold text-sm leading-tight truncate uppercase ${sTextColor}`}>{spouse.fullName}</h3>
+                <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${sIsDeceased ? 'bg-slate-200 text-slate-700' : sIsMale ? 'bg-sky-200 text-sky-800' : 'bg-fuchsia-200 text-fuchsia-800'}`}>
+                    {sIsMale ? 'Laki-laki' : 'Perempuan'} {sIsDeceased ? '(Alm)' : ''}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="absolute -top-3 -right-3 flex gap-1 z-10">
+              <button 
+                onClick={(e) => { e.stopPropagation(); onEditClick(spouse); }}
+                className="p-1.5 text-gray-600 hover:text-emerald-600 transition-colors bg-white rounded-full shadow-md border-2 border-gray-200 hover:border-emerald-400"
+                title="Edit"
+              >
+                <Edit2 className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -198,24 +235,57 @@ export default function TreeView({ members, onNodeClick, onEditClick, currentUse
     // Saring members: hanya yang terhubung
     const connectedMembers = members.filter(m => connectedIds.has(m.id));
 
-    // === Bangun Nodes & Edges dari connectedMembers ===
-    const initialNodes: Node[] = connectedMembers.map((member) => ({
-      id: member.id,
-      type: 'custom',
-      data: { 
-        member, 
-        onEditClick, 
-        onInfoClick: onNodeClick, 
-        currentUserRole,
-        layoutDirection
-      },
-      position: { x: 0, y: 0 },
-    }));
+    // Identifikasi siapa yang menjadi Anchor (Darah) dan Dependents (Pasangan luar)
+    const anchorIds = new Set<string>();
+    connectedMembers.forEach(n => {
+      if (n.parentId) anchorIds.add(n.id);
+    });
+    const rootMemberLocal = connectedMembers.find(n => n.fullName.toLowerCase().includes('iman diharjo'));
+    if (rootMemberLocal) anchorIds.add(rootMemberLocal.id);
+
+    // Filter Pasangan (Orang luar)
+    // Atur force anchor buat member yang melayang tapi punya spouse
+    connectedMembers.forEach(n => {
+      if (!anchorIds.has(n.id)) {
+        const spouse = connectedMembers.find(s => s.id === n.spouseId || s.spouseId === n.id);
+        if (spouse) {
+          if (!anchorIds.has(spouse.id)) {
+             // Jika keduanya orang luar, force male jadi anchor
+             if (n.gender === 'male') anchorIds.add(n.id);
+          }
+        } else {
+          anchorIds.add(n.id); // Floating tunggal
+        }
+      }
+    });
+
+    const anchors = connectedMembers.filter(m => anchorIds.has(m.id));
+    const dependents = connectedMembers.filter(m => !anchorIds.has(m.id));
+
+    // === Bangun Nodes (Hanya Anchors) ===
+    const initialNodes: Node[] = anchors.map((member) => {
+      // Cari pasangannya
+      const mySpouses = dependents.filter(d => d.spouseId === member.id || member.spouseId === d.id);
+      
+      return {
+        id: member.id,
+        type: 'custom',
+        data: { 
+          member, 
+          spouses: mySpouses,
+          onEditClick, 
+          onInfoClick: onNodeClick, 
+          layoutDirection
+        },
+        position: { x: 0, y: 0 },
+      };
+    });
 
     const initialEdges: Edge[] = [];
     
-    connectedMembers.forEach((member) => {
-      if (member.parentId && connectedIds.has(member.parentId)) {
+    // Edges hanya untuk nasab (parentId)
+    anchors.forEach((member) => {
+      if (member.parentId && anchorIds.has(member.parentId)) {
         initialEdges.push({
           id: `e-${member.parentId}-${member.id}`,
           source: member.parentId,
@@ -228,24 +298,6 @@ export default function TreeView({ members, onNodeClick, onEditClick, currentUse
           markerEnd: { type: MarkerType.ArrowClosed, color: '#059669', width: 15, height: 15 },
           markerStart: 'junction-dot', // Menjadi indikator koneksi fisik
         });
-      }
-      if (member.spouseId && connectedIds.has(member.spouseId)) {
-        const edgeId1 = `e-spouse-${member.id}-${member.spouseId}`;
-        const edgeId2 = `e-spouse-${member.spouseId}-${member.id}`;
-        if (!initialEdges.some(e => e.id === edgeId1 || e.id === edgeId2)) {
-          initialEdges.push({
-            id: edgeId1,
-            source: member.id,
-            target: member.spouseId,
-            sourceHandle: 'spouse-source',
-            targetHandle: 'spouse-target',
-            type: 'straight', // Jalur lurus langsung (menghindari siku yang nabrak anak)
-            style: { stroke: '#f59e0b', strokeWidth: 2.5, strokeDasharray: '6,6' }, 
-            label: '❤️',
-            labelStyle: { fill: '#b45309', fontWeight: 800, fontSize: 12 },
-            labelBgStyle: { fill: '#fef3c7', fillOpacity: 0.8, rx: 4, ry: 4 },
-          });
-        }
       }
     });
 
